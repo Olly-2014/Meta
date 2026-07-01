@@ -100,6 +100,9 @@
   .thumb-placeholder svg{width:34px;height:34px;color:var(--text-faint);}
   .duration-badge{position:absolute;bottom:8px;right:8px;background:rgba(0,0,0,0.75);color:#fff;font-size:11px;
     padding:2px 6px;border-radius:6px;font-family:'IBM Plex Mono';}
+  .vc-delete-btn{position:absolute;top:8px;right:8px;width:30px;height:30px;border-radius:50%;
+    background:rgba(0,0,0,0.6);border:1px solid rgba(255,255,255,0.15);display:flex;align-items:center;justify-content:center;}
+  .vc-delete-btn svg{width:15px;height:15px;}
   .vc-meta{display:flex;gap:10px;margin-top:10px;align-items:flex-start;}
   .avatar{width:36px;height:36px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;
     font-family:'Space Grotesk';font-weight:700;font-size:14px;color:#fff;}
@@ -801,7 +804,7 @@
       });
   }
 
-  function renderVideoCard(v){
+  function renderVideoCard(v, deletable){
     var ch = v.channels || {};
     var color = ch.avatar_color || "#7c5cff";
     var isPhoto = v.media_type === "photo";
@@ -812,9 +815,12 @@
     var badge = isPhoto
       ? '<span class="duration-badge"><svg viewBox="0 0 24 24" fill="none" style="width:11px;height:11px;vertical-align:-1px;"><path d="M4 8a2 2 0 0 1 2-2h2l1.5-2h5L16 6h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8Z" stroke="white" stroke-width="1.6"/></svg></span>'
       : (v.duration_seconds ? '<span class="duration-badge">' + fmtDuration(v.duration_seconds) + '</span>' : '');
+    var deleteBtn = deletable
+      ? '<button class="vc-delete-btn" data-video-id="' + v.id + '"><svg viewBox="0 0 24 24" fill="none"><path d="M4 7h16M9 7V4h6v3m-8 0 1 13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1l1-13" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>'
+      : '';
     return '' +
     '<div class="video-card" data-video-id="' + v.id + '">' +
-      '<div class="thumb-wrap">' + thumbHtml + badge + renderOverlaysHtml(v.text_overlays) +
+      '<div class="thumb-wrap">' + thumbHtml + badge + renderOverlaysHtml(v.text_overlays) + deleteBtn +
       '</div>' +
       '<div class="vc-meta">' +
         '<div class="avatar" style="background:' + color + '">' + initials(ch.name) + '</div>' +
@@ -829,6 +835,33 @@
     container.querySelectorAll(".video-card").forEach(function(card){
       card.addEventListener("click", function(){
         openVideo(card.getAttribute("data-video-id"));
+      });
+    });
+    container.querySelectorAll(".vc-delete-btn").forEach(function(btn){
+      btn.addEventListener("click", function(e){
+        e.stopPropagation();
+        deleteVideoFlow(btn.getAttribute("data-video-id"), btn.closest(".video-card"));
+      });
+    });
+  }
+
+  function deleteVideoFlow(videoId, cardEl){
+    var confirmed = confirm("Eliminare definitivamente questo video? L'azione non puo essere annullata.");
+    if(!confirmed) return;
+    sb.from("videos").select("video_url, thumbnail_url").eq("id", videoId).single().then(function(vres){
+      var v = vres.data;
+      var tasks = [];
+      if(v){
+        var vp = storagePathFromUrl(v.video_url, "videos");
+        var tp = storagePathFromUrl(v.thumbnail_url, "thumbnails");
+        if(vp) tasks.push(sb.storage.from("videos").remove([vp]));
+        if(tp) tasks.push(sb.storage.from("thumbnails").remove([tp]));
+      }
+      Promise.all(tasks).then(function(){
+        sb.from("videos").delete().eq("id", videoId).then(function(res){
+          if(res.error){ alert("Errore: " + res.error.message); return; }
+          if(cardEl) cardEl.remove();
+        });
       });
     });
   }
@@ -1220,7 +1253,7 @@
               box.innerHTML = emptyState("Nessun video pubblicato.");
               return;
             }
-            box.innerHTML = vres.data.map(renderVideoCard).join("");
+            box.innerHTML = vres.data.map(function(v){ return renderVideoCard(v, isOwner); }).join("");
             attachVideoCardListeners(box);
           });
       });
