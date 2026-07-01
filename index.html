@@ -1161,7 +1161,14 @@
     sb.from("channels").insert({
       owner_id: state.session.user.id, name: name, handle: handle, avatar_color: color
     }).select().single().then(function(res){
-      if(res.error){ alert("Errore: " + res.error.message); return; }
+      if(res.error){
+        if(res.error.message.indexOf("channels_handle_key") !== -1){
+          alert("L'handle \"@" + handle + "\" e gia in uso da un altro canale. Scegline uno diverso.");
+        } else {
+          alert("Errore: " + res.error.message);
+        }
+        return;
+      }
       state.myChannels.push(res.data);
       renderProfile();
     });
