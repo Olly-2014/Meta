@@ -1,0 +1,1036 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0">
+<title>Meta</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --bg:#060a12;
+    --bg-elevated:#0b1220;
+    --glass:rgba(255,255,255,0.055);
+    --glass-strong:rgba(255,255,255,0.09);
+    --border:rgba(255,255,255,0.09);
+    --ember:#3d8bff;
+    --ember-dim:rgba(61,139,255,0.15);
+    --violet:#7c5cff;
+    --text:#f5f5f7;
+    --text-muted:#8b8b93;
+    --text-faint:#55555d;
+    --danger:#ff4d4d;
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;overscroll-behavior-y:none;}
+  body{padding-top:var(--safe-top);}
+  ::-webkit-scrollbar{display:none;}
+  .mono{font-family:'IBM Plex Mono',monospace;}
+  .display{font-family:'Space Grotesk',sans-serif;}
+  a{color:inherit;text-decoration:none;}
+  button{font-family:inherit;cursor:pointer;}
+  input,textarea{font-family:inherit;}
+
+  #app{max-width:560px;margin:0 auto;min-height:100vh;position:relative;padding-bottom:calc(84px + var(--safe-bottom));}
+
+  /* ---------- Top bar ---------- */
+  .topbar{position:sticky;top:0;z-index:40;display:flex;align-items:center;justify-content:space-between;
+    padding:14px 18px;background:rgba(8,8,12,0.72);backdrop-filter:blur(24px) saturate(180%);
+    border-bottom:1px solid var(--border);}
+  .logo{display:flex;align-items:center;gap:8px;font-family:'Space Grotesk';font-weight:700;font-size:20px;letter-spacing:-0.02em;}
+  .rec-dot{width:9px;height:9px;border-radius:50%;background:var(--ember);box-shadow:0 0 0 0 rgba(61,139,255,0.6);animation:pulse 2s infinite;}
+  @keyframes pulse{
+    0%{box-shadow:0 0 0 0 rgba(61,139,255,0.55);}
+    70%{box-shadow:0 0 0 8px rgba(61,139,255,0);}
+    100%{box-shadow:0 0 0 0 rgba(61,139,255,0);}
+  }
+  .icon-btn{width:38px;height:38px;border-radius:12px;background:var(--glass);border:1px solid var(--border);
+    display:flex;align-items:center;justify-content:center;color:var(--text);}
+  .back-row{display:flex;align-items:center;gap:10px;}
+
+  /* ---------- Glass ---------- */
+  .glass{background:var(--glass);border:1px solid var(--border);border-radius:18px;}
+  .glass-strong{background:var(--glass-strong);border:1px solid var(--border);border-radius:18px;}
+
+  /* ---------- Bottom nav ---------- */
+  .bottomnav{position:fixed;bottom:0;left:0;right:0;max-width:560px;margin:0 auto;z-index:50;
+    display:flex;align-items:center;justify-content:space-around;
+    padding:10px 10px calc(10px + var(--safe-bottom));
+    background:rgba(10,10,15,0.78);backdrop-filter:blur(28px) saturate(180%);
+    border-top:1px solid var(--border);}
+  .navbtn{display:flex;flex-direction:column;align-items:center;gap:4px;background:none;border:none;color:var(--text-faint);
+    padding:6px 10px;border-radius:12px;transition:color .15s;}
+  .navbtn.active{color:var(--text);}
+  .navbtn svg{width:22px;height:22px;}
+  .navbtn span{font-size:10px;font-weight:600;letter-spacing:0.01em;}
+  .fab{width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,var(--ember),#6eb4ff);
+    display:flex;align-items:center;justify-content:center;margin-top:-26px;box-shadow:0 8px 24px rgba(61,139,255,0.35);
+    border:3px solid var(--bg);color:#ffffff;}
+  .fab svg{width:24px;height:24px;}
+
+  /* ---------- Screens ---------- */
+  .screen{padding:16px 16px 24px;animation:fadein .25s ease;}
+  @keyframes fadein{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:translateY(0);}}
+  .hidden{display:none !important;}
+
+  h1.page-title{font-family:'Space Grotesk';font-size:26px;font-weight:700;letter-spacing:-0.02em;margin:4px 0 18px;}
+
+  /* ---------- Search ---------- */
+  .search-bar{display:flex;align-items:center;gap:10px;padding:12px 14px;margin-bottom:16px;}
+  .search-bar input{flex:1;background:none;border:none;outline:none;color:var(--text);font-size:15px;}
+  .search-bar input::placeholder{color:var(--text-faint);}
+  .search-bar svg{width:18px;height:18px;color:var(--text-faint);flex-shrink:0;}
+
+  /* ---------- Video card (feed) ---------- */
+  .video-card{margin-bottom:20px;}
+  .thumb-wrap{position:relative;width:100%;aspect-ratio:16/9;border-radius:16px;overflow:hidden;background:#141420;}
+  .thumb-wrap img,.thumb-wrap video{width:100%;height:100%;object-fit:cover;display:block;}
+  .thumb-placeholder{width:100%;height:100%;display:flex;align-items:center;justify-content:center;
+    background:linear-gradient(135deg,#1a1a28,#0e0e16);}
+  .thumb-placeholder svg{width:34px;height:34px;color:var(--text-faint);}
+  .duration-badge{position:absolute;bottom:8px;right:8px;background:rgba(0,0,0,0.75);color:#fff;font-size:11px;
+    padding:2px 6px;border-radius:6px;font-family:'IBM Plex Mono';}
+  .vc-meta{display:flex;gap:10px;margin-top:10px;align-items:flex-start;}
+  .avatar{width:36px;height:36px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;
+    font-family:'Space Grotesk';font-weight:700;font-size:14px;color:#fff;}
+  .vc-text{flex:1;min-width:0;}
+  .vc-title{font-size:15px;font-weight:600;line-height:1.35;margin:0 0 3px;
+    display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+  .vc-sub{font-size:12.5px;color:var(--text-muted);}
+  .vc-sub .dot{margin:0 5px;}
+
+  /* ---------- Buttons / forms ---------- */
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:13px 20px;border-radius:14px;
+    border:none;font-weight:600;font-size:14.5px;width:100%;}
+  .btn-primary{background:var(--ember);color:#ffffff;}
+  .btn-ghost{background:var(--glass);color:var(--text);border:1px solid var(--border);}
+  .btn-violet{background:var(--violet);color:#fff;}
+  .btn-danger-outline{background:none;border:1px solid rgba(255,77,77,0.4);color:var(--danger);}
+  .btn-sm{width:auto;padding:9px 16px;font-size:13px;}
+  .field{margin-bottom:14px;}
+  .field label{display:block;font-size:12.5px;color:var(--text-muted);margin-bottom:6px;font-weight:600;}
+  .field input,.field textarea{width:100%;padding:13px 14px;border-radius:14px;background:var(--glass);
+    border:1px solid var(--border);color:var(--text);font-size:15px;outline:none;}
+  .field textarea{resize:none;min-height:80px;}
+  .field input:focus,.field textarea:focus{border-color:rgba(61,139,255,0.5);}
+
+  /* ---------- Auth ---------- */
+  .auth-wrap{min-height:100vh;display:flex;flex-direction:column;justify-content:center;padding:28px;}
+  .auth-hero{text-align:center;margin-bottom:32px;}
+  .auth-hero .logo{justify-content:center;font-size:28px;margin-bottom:8px;}
+  .auth-hero p{color:var(--text-muted);font-size:14px;}
+  .auth-toggle{display:flex;gap:6px;background:var(--glass);border-radius:14px;padding:4px;margin-bottom:22px;}
+  .auth-toggle button{flex:1;padding:10px;border:none;background:none;border-radius:11px;color:var(--text-muted);font-weight:600;font-size:14px;}
+  .auth-toggle button.active{background:var(--glass-strong);color:var(--text);}
+  .auth-error{color:var(--danger);font-size:13px;margin-bottom:12px;}
+
+  /* ---------- Channel header ---------- */
+  .channel-header{display:flex;flex-direction:column;align-items:center;text-align:center;padding:24px 0 20px;}
+  .channel-avatar-lg{width:84px;height:84px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+    font-family:'Space Grotesk';font-weight:700;font-size:30px;color:#fff;margin-bottom:14px;}
+  .channel-name{font-family:'Space Grotesk';font-size:21px;font-weight:700;}
+  .channel-handle{color:var(--text-muted);font-size:13px;margin-top:2px;}
+  .channel-stats{color:var(--text-muted);font-size:13px;margin-top:8px;font-family:'IBM Plex Mono';}
+  .channel-desc{color:var(--text-muted);font-size:13.5px;margin-top:10px;max-width:400px;line-height:1.5;}
+  .channel-actions{margin-top:16px;display:flex;gap:10px;}
+
+  /* ---------- Video page ---------- */
+  .player-wrap{width:100%;border-radius:0;background:#000;position:sticky;top:0;z-index:5;}
+  .player-wrap video{width:100%;display:block;max-height:56vh;background:#000;}
+  .vp-title{font-family:'Space Grotesk';font-size:19px;font-weight:700;margin:16px 0 6px;line-height:1.3;}
+  .vp-sub{color:var(--text-muted);font-size:13px;font-family:'IBM Plex Mono';}
+  .vp-channel-row{display:flex;align-items:center;gap:12px;margin:18px 0;}
+  .vp-actions{display:flex;gap:10px;margin:16px 0;}
+  .like-btn{display:flex;align-items:center;gap:8px;padding:11px 18px;border-radius:14px;border:1px solid var(--border);
+    background:var(--glass);color:var(--text);font-weight:600;font-size:14px;}
+  .like-btn.liked{background:var(--ember-dim);border-color:rgba(61,139,255,0.4);color:var(--ember);}
+  .like-btn svg{width:18px;height:18px;}
+  .vp-desc{background:var(--glass);border-radius:16px;padding:14px;font-size:13.5px;color:var(--text-muted);line-height:1.5;margin:14px 0;}
+
+  /* ---------- Comments ---------- */
+  .comment-form{display:flex;gap:10px;align-items:center;margin:18px 0;}
+  .comment-form input{flex:1;background:var(--glass);border:1px solid var(--border);border-radius:20px;padding:11px 16px;
+    color:var(--text);font-size:14px;outline:none;}
+  .comment-form button{background:var(--ember);border:none;border-radius:20px;padding:11px 16px;color:#ffffff;font-weight:700;font-size:13px;}
+  .comment{display:flex;gap:10px;margin-bottom:16px;}
+  .comment .avatar{width:30px;height:30px;font-size:12px;}
+  .comment-body{flex:1;}
+  .comment-author{font-size:13px;font-weight:600;}
+  .comment-time{font-size:11px;color:var(--text-faint);margin-left:6px;font-weight:400;font-family:'IBM Plex Mono';}
+  .comment-text{font-size:13.5px;color:#dcdce0;margin-top:2px;line-height:1.4;}
+
+  /* ---------- Empty states ---------- */
+  .empty{text-align:center;padding:60px 20px;color:var(--text-faint);}
+  .empty svg{width:40px;height:40px;margin-bottom:14px;opacity:0.5;}
+  .empty p{font-size:14px;}
+
+  /* ---------- Upload ---------- */
+  .upload-drop{border:1.5px dashed var(--border);border-radius:18px;padding:36px 20px;text-align:center;margin-bottom:18px;}
+  .upload-drop svg{width:30px;height:30px;color:var(--text-faint);margin-bottom:10px;}
+  .upload-drop p{font-size:13.5px;color:var(--text-muted);}
+  .upload-drop.has-file{border-style:solid;border-color:rgba(61,139,255,0.4);}
+  .progress-ring-wrap{display:flex;flex-direction:column;align-items:center;padding:40px 0;gap:16px;}
+  .spinner{width:44px;height:44px;border-radius:50%;border:3px solid rgba(61,139,255,0.2);border-top-color:var(--ember);
+    animation:spin .8s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .channel-select{display:flex;gap:8px;overflow-x:auto;padding-bottom:6px;margin-bottom:18px;}
+  .channel-chip{flex-shrink:0;display:flex;align-items:center;gap:8px;padding:8px 14px 8px 8px;border-radius:20px;
+    background:var(--glass);border:1px solid var(--border);font-size:13px;font-weight:600;white-space:nowrap;}
+  .channel-chip.selected{border-color:var(--ember);background:var(--ember-dim);color:var(--ember);}
+  .channel-chip .avatar{width:24px;height:24px;font-size:10px;}
+
+  .row-between{display:flex;justify-content:space-between;align-items:center;}
+  .section-title{font-size:13px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.04em;margin:22px 0 12px;}
+  .list-channel{display:flex;align-items:center;gap:12px;padding:12px;margin-bottom:8px;}
+  .list-channel .avatar{width:44px;height:44px;font-size:16px;}
+  .list-channel-name{font-weight:600;font-size:14.5px;}
+  .list-channel-handle{font-size:12px;color:var(--text-muted);}
+</style>
+</head>
+<body>
+
+<div id="auth-screen" class="auth-wrap hidden">
+  <div class="auth-hero">
+    <div class="logo"><span class="rec-dot"></span>Meta</div>
+    <p>Il tuo spazio per pubblicare e guardare video.</p>
+  </div>
+  <div class="auth-toggle">
+    <button id="tab-login" class="active">Accedi</button>
+    <button id="tab-signup">Registrati</button>
+  </div>
+  <div id="auth-error" class="auth-error hidden"></div>
+  <div id="signup-username-field" class="field hidden">
+    <label>Nome utente</label>
+    <input type="text" id="auth-username" placeholder="es. marco_92" autocapitalize="none">
+  </div>
+  <div class="field">
+    <label>Email</label>
+    <input type="email" id="auth-email" placeholder="tu@esempio.com" autocapitalize="none">
+  </div>
+  <div class="field">
+    <label>Password</label>
+    <input type="password" id="auth-password" placeholder="••••••••">
+  </div>
+  <button class="btn btn-primary" id="auth-submit">Accedi</button>
+</div>
+
+<div id="app" class="hidden">
+  <div class="topbar">
+    <div id="topbar-left" class="back-row">
+      <div class="logo"><span class="rec-dot"></span>Meta</div>
+    </div>
+    <button class="icon-btn" id="profile-shortcut">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M12 12c2.5 0 4.5-2 4.5-4.5S14.5 3 12 3 7.5 5 7.5 7.5 9.5 12 12 12Zm0 2c-3.3 0-9 1.7-9 5v2h18v-2c0-3.3-5.7-5-9-5Z" fill="currentColor"/></svg>
+    </button>
+  </div>
+
+  <div id="view-home" class="screen"></div>
+  <div id="view-search" class="screen hidden"></div>
+  <div id="view-upload" class="screen hidden"></div>
+  <div id="view-subs" class="screen hidden"></div>
+  <div id="view-profile" class="screen hidden"></div>
+  <div id="view-channel" class="screen hidden"></div>
+  <div id="view-video" class="screen hidden"></div>
+
+  <div class="bottomnav">
+    <button class="navbtn active" data-nav="home">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M3 11.5 12 4l9 7.5V20a1 1 0 0 1-1 1h-5v-6H10v6H4a1 1 0 0 1-1-1v-8.5Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+      <span>Home</span>
+    </button>
+    <button class="navbtn" data-nav="search">
+      <svg viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.8"/><path d="m21 21-4.3-4.3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      <span>Cerca</span>
+    </button>
+    <button class="fab" id="nav-upload">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
+    </button>
+    <button class="navbtn" data-nav="subs">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M4 6h16M4 12h16M4 18h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      <span>Iscrizioni</span>
+    </button>
+    <button class="navbtn" data-nav="profile">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M12 12c2.5 0 4.5-2 4.5-4.5S14.5 3 12 3 7.5 5 7.5 7.5 9.5 12 12 12Zm0 2c-3.3 0-9 1.7-9 5v2h18v-2c0-3.3-5.7-5-9-5Z" fill="currentColor"/></svg>
+      <span>Profilo</span>
+    </button>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  var SUPABASE_URL = "https://hukapntuhhwpruzgdbma.supabase.co";
+  var SUPABASE_KEY = "sb_publishable_7s7M9t7oXQ4uuKO6P2bSTw_HkvE92h9";
+  var sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+  var state = {
+    session: null,
+    profile: null,
+    myChannels: [],
+    mySubscriptions: [],
+    currentView: "home",
+    history: [],
+    channelColors: ["#7c5cff","#3d8bff","#2ecc71","#ffb020","#ff4d94","#22c3d6"]
+  };
+
+  function el(id){ return document.getElementById(id); }
+  function esc(s){
+    if(s === null || s === undefined) return "";
+    return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");
+  }
+  function initials(name){
+    if(!name) return "?";
+    var parts = name.trim().split(" ");
+    if(parts.length === 1) return parts[0].substring(0,2).toUpperCase();
+    return (parts[0][0] + parts[1][0]).toUpperCase();
+  }
+  function timeAgo(dateStr){
+    var d = new Date(dateStr);
+    var diff = Math.floor((Date.now() - d.getTime()) / 1000);
+    if(diff < 60) return "adesso";
+    if(diff < 3600) return Math.floor(diff/60) + " min fa";
+    if(diff < 86400) return Math.floor(diff/3600) + " h fa";
+    if(diff < 2592000) return Math.floor(diff/86400) + " g fa";
+    if(diff < 31536000) return Math.floor(diff/2592000) + " mesi fa";
+    return Math.floor(diff/31536000) + " anni fa";
+  }
+  function fmtViews(n){
+    n = n || 0;
+    if(n < 1000) return n + " visualizzazioni";
+    if(n < 1000000) return (n/1000).toFixed(n % 1000 >= 100 ? 1 : 0) + "k visualizzazioni";
+    return (n/1000000).toFixed(1) + "M visualizzazioni";
+  }
+  function fmtDuration(sec){
+    sec = Math.floor(sec || 0);
+    var m = Math.floor(sec/60), s = sec % 60;
+    return m + ":" + (s < 10 ? "0" + s : s);
+  }
+
+  /* ---------------- Navigation ---------------- */
+  var VIEWS = ["home","search","upload","subs","profile","channel","video"];
+  function showView(name, pushHistory){
+    if(pushHistory !== false && state.currentView !== name){
+      state.history.push(state.currentView);
+    }
+    state.currentView = name;
+    for(var i=0;i<VIEWS.length;i++){
+      var v = el("view-" + VIEWS[i]);
+      if(v) v.classList.toggle("hidden", VIEWS[i] !== name);
+    }
+    var navBtns = document.querySelectorAll(".navbtn");
+    for(var j=0;j<navBtns.length;j++){
+      navBtns[j].classList.toggle("active", navBtns[j].getAttribute("data-nav") === name);
+    }
+    updateTopbar(name);
+    window.scrollTo(0,0);
+  }
+  function goBack(){
+    var prev = state.history.pop();
+    showView(prev || "home", false);
+    if(prev === "home") renderHome();
+  }
+  function updateTopbar(name){
+    var left = el("topbar-left");
+    if(name === "video" || name === "channel"){
+      left.innerHTML = '<button class="icon-btn" id="btn-back"><svg viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>';
+      el("btn-back").addEventListener("click", goBack);
+    } else {
+      left.innerHTML = '<div class="logo"><span class="rec-dot"></span>Meta</div>';
+    }
+  }
+
+  document.querySelectorAll(".navbtn").forEach(function(btn){
+    btn.addEventListener("click", function(){
+      var target = btn.getAttribute("data-nav");
+      state.history = [];
+      showView(target, false);
+      if(target === "home") renderHome();
+      if(target === "search") renderSearch();
+      if(target === "subs") renderSubs();
+      if(target === "profile") renderProfile();
+    });
+  });
+  el("nav-upload").addEventListener("click", function(){
+    if(!state.session){ showAuthRequired(); return; }
+    state.history = [];
+    showView("upload", false);
+    renderUpload();
+  });
+  el("profile-shortcut").addEventListener("click", function(){
+    state.history = [];
+    showView("profile", false);
+    renderProfile();
+  });
+
+  function showAuthRequired(){
+    alert("Accedi o registrati per continuare.");
+    document.getElementById("auth-screen").classList.remove("hidden");
+    document.getElementById("app").classList.add("hidden");
+  }
+
+  /* ---------------- Auth ---------------- */
+  var authMode = "login";
+  el("tab-login").addEventListener("click", function(){
+    authMode = "login";
+    el("tab-login").classList.add("active");
+    el("tab-signup").classList.remove("active");
+    el("signup-username-field").classList.add("hidden");
+    el("auth-submit").textContent = "Accedi";
+  });
+  el("tab-signup").addEventListener("click", function(){
+    authMode = "signup";
+    el("tab-signup").classList.add("active");
+    el("tab-login").classList.remove("active");
+    el("signup-username-field").classList.remove("hidden");
+    el("auth-submit").textContent = "Crea account";
+  });
+
+  el("auth-submit").addEventListener("click", function(){
+    var email = el("auth-email").value.trim();
+    var password = el("auth-password").value;
+    var errBox = el("auth-error");
+    errBox.classList.add("hidden");
+    if(!email || !password){
+      errBox.textContent = "Inserisci email e password.";
+      errBox.classList.remove("hidden");
+      return;
+    }
+    el("auth-submit").textContent = "Attendere...";
+    el("auth-submit").disabled = true;
+
+    if(authMode === "signup"){
+      var username = el("auth-username").value.trim();
+      if(!username){
+        errBox.textContent = "Scegli un nome utente.";
+        errBox.classList.remove("hidden");
+        el("auth-submit").disabled = false;
+        el("auth-submit").textContent = "Crea account";
+        return;
+      }
+      sb.auth.signUp({
+        email: email,
+        password: password,
+        options: { data: { username: username } }
+      }).then(function(res){
+        el("auth-submit").disabled = false;
+        el("auth-submit").textContent = "Crea account";
+        if(res.error){
+          errBox.textContent = res.error.message;
+          errBox.classList.remove("hidden");
+          return;
+        }
+        if(res.data.session){
+          onAuthReady(res.data.session);
+        } else {
+          errBox.textContent = "Controlla la tua email per confermare l'account.";
+          errBox.classList.remove("hidden");
+        }
+      });
+    } else {
+      sb.auth.signInWithPassword({ email: email, password: password }).then(function(res){
+        el("auth-submit").disabled = false;
+        el("auth-submit").textContent = "Accedi";
+        if(res.error){
+          errBox.textContent = res.error.message;
+          errBox.classList.remove("hidden");
+          return;
+        }
+        onAuthReady(res.data.session);
+      });
+    }
+  });
+
+  function onAuthReady(session){
+    state.session = session;
+    loadProfileAndEnter();
+  }
+
+  function loadProfileAndEnter(){
+    if(!state.session){
+      el("auth-screen").classList.remove("hidden");
+      el("app").classList.add("hidden");
+      renderHome();
+      return;
+    }
+    sb.from("profiles").select("*").eq("id", state.session.user.id).single().then(function(res){
+      state.profile = res.data;
+      el("auth-screen").classList.add("hidden");
+      el("app").classList.remove("hidden");
+      loadMyChannels();
+      loadMySubscriptions();
+      showView(state.currentView || "home", false);
+      renderHome();
+    });
+  }
+
+  function loadMyChannels(){
+    if(!state.session) return;
+    sb.from("channels").select("*").eq("owner_id", state.session.user.id).order("created_at").then(function(res){
+      state.myChannels = res.data || [];
+    });
+  }
+  function loadMySubscriptions(){
+    if(!state.session) return;
+    sb.from("subscriptions").select("channel_id").eq("subscriber_id", state.session.user.id).then(function(res){
+      state.mySubscriptions = (res.data || []).map(function(r){ return r.channel_id; });
+    });
+  }
+
+  /* ---------------- Home / Feed ---------------- */
+  function renderHome(){
+    var container = el("view-home");
+    container.innerHTML = '<h1 class="page-title">Home</h1><div id="feed-list"></div>';
+    var feedList = el("feed-list");
+    feedList.innerHTML = '<div class="progress-ring-wrap"><div class="spinner"></div></div>';
+
+    sb.from("videos")
+      .select("*, channels(name, handle, avatar_color, owner_id)")
+      .order("created_at", { ascending: false })
+      .limit(30)
+      .then(function(res){
+        if(!res.data || res.data.length === 0){
+          feedList.innerHTML = emptyState("Nessun video ancora. Sii il primo a pubblicare!", iconCamera());
+          return;
+        }
+        feedList.innerHTML = res.data.map(renderVideoCard).join("");
+        attachVideoCardListeners(feedList);
+      });
+  }
+
+  function renderVideoCard(v){
+    var ch = v.channels || {};
+    var color = ch.avatar_color || "#7c5cff";
+    var thumbHtml = v.thumbnail_url
+      ? '<img src="' + esc(v.thumbnail_url) + '" loading="lazy">'
+      : '<div class="thumb-placeholder">' + iconCamera() + '</div>';
+    return '' +
+    '<div class="video-card" data-video-id="' + v.id + '">' +
+      '<div class="thumb-wrap">' + thumbHtml +
+        (v.duration_seconds ? '<span class="duration-badge">' + fmtDuration(v.duration_seconds) + '</span>' : '') +
+      '</div>' +
+      '<div class="vc-meta">' +
+        '<div class="avatar" style="background:' + color + '">' + initials(ch.name) + '</div>' +
+        '<div class="vc-text">' +
+          '<p class="vc-title">' + esc(v.title) + '</p>' +
+          '<p class="vc-sub">' + esc(ch.name || "") + '<span class="dot">&middot;</span>' + fmtViews(v.views) + '<span class="dot">&middot;</span>' + timeAgo(v.created_at) + '</p>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  }
+  function attachVideoCardListeners(container){
+    container.querySelectorAll(".video-card").forEach(function(card){
+      card.addEventListener("click", function(){
+        openVideo(card.getAttribute("data-video-id"));
+      });
+    });
+  }
+
+  function iconCamera(){
+    return '<svg viewBox="0 0 24 24" fill="none"><path d="M4 8a2 2 0 0 1 2-2h2l1.5-2h5L16 6h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8Z" stroke="currentColor" stroke-width="1.6"/><circle cx="12" cy="13" r="3.4" stroke="currentColor" stroke-width="1.6"/></svg>';
+  }
+  function emptyState(text, icon){
+    return '<div class="empty">' + (icon || "") + '<p>' + esc(text) + '</p></div>';
+  }
+
+  /* ---------------- Search ---------------- */
+  function renderSearch(){
+    var container = el("view-search");
+    container.innerHTML =
+      '<h1 class="page-title">Cerca</h1>' +
+      '<div class="glass search-bar"><svg viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.8"/><path d="m21 21-4.3-4.3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>' +
+      '<input type="text" id="search-input" placeholder="Cerca video o canali..."></div>' +
+      '<div id="search-results"></div>';
+    var input = el("search-input");
+    var resultsBox = el("search-results");
+    var timer = null;
+    input.addEventListener("input", function(){
+      clearTimeout(timer);
+      var q = input.value.trim();
+      if(q.length < 2){ resultsBox.innerHTML = ""; return; }
+      timer = setTimeout(function(){ doSearch(q, resultsBox); }, 350);
+    });
+    input.focus();
+  }
+  function doSearch(q, box){
+    box.innerHTML = '<div class="progress-ring-wrap"><div class="spinner"></div></div>';
+    sb.from("videos").select("*, channels(name, handle, avatar_color, owner_id)")
+      .ilike("title", "%" + q + "%").limit(20).then(function(res){
+        var videos = res.data || [];
+        if(videos.length === 0){
+          box.innerHTML = emptyState("Nessun risultato per \u00ab" + q + "\u00bb");
+          return;
+        }
+        box.innerHTML = '<div class="section-title">Video</div>' + videos.map(renderVideoCard).join("");
+        attachVideoCardListeners(box);
+      });
+  }
+
+  /* ---------------- Subscriptions ---------------- */
+  function renderSubs(){
+    var container = el("view-subs");
+    if(!state.session){
+      container.innerHTML = '<h1 class="page-title">Iscrizioni</h1>' + emptyState("Accedi per vedere i canali a cui sei iscritto.");
+      return;
+    }
+    container.innerHTML = '<h1 class="page-title">Iscrizioni</h1><div id="subs-list"><div class="progress-ring-wrap"><div class="spinner"></div></div></div>';
+    sb.from("subscriptions").select("channels(*)").eq("subscriber_id", state.session.user.id).then(function(res){
+      var box = el("subs-list");
+      var channels = (res.data || []).map(function(r){ return r.channels; }).filter(Boolean);
+      if(channels.length === 0){
+        box.innerHTML = emptyState("Non sei iscritto a nessun canale.");
+        return;
+      }
+      box.innerHTML = channels.map(function(c){
+        return '<div class="glass list-channel" data-channel-id="' + c.id + '">' +
+          '<div class="avatar" style="background:' + c.avatar_color + '">' + initials(c.name) + '</div>' +
+          '<div><div class="list-channel-name">' + esc(c.name) + '</div><div class="list-channel-handle">@' + esc(c.handle) + '</div></div>' +
+        '</div>';
+      }).join("");
+      box.querySelectorAll(".list-channel").forEach(function(row){
+        row.addEventListener("click", function(){ openChannel(row.getAttribute("data-channel-id")); });
+      });
+      renderSubsFeed(channels.map(function(c){ return c.id; }));
+    });
+  }
+  function renderSubsFeed(channelIds){
+    if(channelIds.length === 0) return;
+    var box = el("subs-list");
+    sb.from("videos").select("*, channels(name, handle, avatar_color, owner_id)")
+      .in("channel_id", channelIds).order("created_at",{ascending:false}).limit(20).then(function(res){
+        if(res.data && res.data.length > 0){
+          box.innerHTML += '<div class="section-title">Video recenti</div>' + res.data.map(renderVideoCard).join("");
+          attachVideoCardListeners(box);
+        }
+      });
+  }
+
+  /* ---------------- Profile ---------------- */
+  function renderProfile(){
+    var container = el("view-profile");
+    if(!state.session){
+      container.innerHTML = '<h1 class="page-title">Profilo</h1>' +
+        '<p style="color:var(--text-muted);font-size:14px;margin-bottom:16px;">Accedi per creare canali e caricare video.</p>' +
+        '<button class="btn btn-primary" id="go-login">Accedi / Registrati</button>';
+      el("go-login").addEventListener("click", function(){
+        el("auth-screen").classList.remove("hidden");
+        el("app").classList.add("hidden");
+      });
+      return;
+    }
+    container.innerHTML =
+      '<h1 class="page-title">Profilo</h1>' +
+      '<div class="glass" style="padding:18px;display:flex;align-items:center;gap:14px;">' +
+        '<div class="avatar" style="width:52px;height:52px;font-size:18px;background:' + (state.profile ? state.profile.avatar_color : "#7c5cff") + '">' + initials(state.profile ? state.profile.username : "?") + '</div>' +
+        '<div><div style="font-weight:700;font-size:16px;">' + esc(state.profile ? state.profile.username : "") + '</div>' +
+        '<div style="font-size:12.5px;color:var(--text-muted);">' + esc(state.session.user.email) + '</div></div>' +
+      '</div>' +
+      '<div class="section-title">I tuoi canali</div>' +
+      '<div id="my-channels-list"></div>' +
+      '<button class="btn btn-ghost" id="create-channel-btn" style="margin-top:6px;">+ Crea nuovo canale</button>' +
+      '<button class="btn btn-danger-outline" id="logout-btn" style="margin-top:24px;">Esci</button>';
+
+    var listBox = el("my-channels-list");
+    if(state.myChannels.length === 0){
+      listBox.innerHTML = '<p style="font-size:13px;color:var(--text-faint);margin-bottom:10px;">Non hai ancora un canale.</p>';
+    } else {
+      listBox.innerHTML = state.myChannels.map(function(c){
+        return '<div class="glass list-channel" data-channel-id="' + c.id + '">' +
+          '<div class="avatar" style="background:' + c.avatar_color + '">' + initials(c.name) + '</div>' +
+          '<div><div class="list-channel-name">' + esc(c.name) + '</div><div class="list-channel-handle">@' + esc(c.handle) + '</div></div>' +
+        '</div>';
+      }).join("");
+      listBox.querySelectorAll(".list-channel").forEach(function(row){
+        row.addEventListener("click", function(){ openChannel(row.getAttribute("data-channel-id")); });
+      });
+    }
+    el("create-channel-btn").addEventListener("click", openCreateChannelFlow);
+    el("logout-btn").addEventListener("click", function(){
+      sb.auth.signOut().then(function(){
+        state.session = null; state.profile = null; state.myChannels = []; state.mySubscriptions = [];
+        el("app").classList.add("hidden");
+        el("auth-screen").classList.remove("hidden");
+      });
+    });
+  }
+
+  function openCreateChannelFlow(){
+    var name = prompt("Nome del canale:");
+    if(!name) return;
+    var handle = prompt("Handle (senza @, es. marco_videos):");
+    if(!handle) return;
+    handle = handle.toLowerCase().replace(/[^a-z0-9_]/g,"");
+    var color = state.channelColors[state.myChannels.length % state.channelColors.length];
+    sb.from("channels").insert({
+      owner_id: state.session.user.id, name: name, handle: handle, avatar_color: color
+    }).select().single().then(function(res){
+      if(res.error){ alert("Errore: " + res.error.message); return; }
+      state.myChannels.push(res.data);
+      renderProfile();
+    });
+  }
+
+  /* ---------------- Channel page ---------------- */
+  function openChannel(channelId){
+    showView("channel");
+    var container = el("view-channel");
+    container.innerHTML = '<div class="progress-ring-wrap"><div class="spinner"></div></div>';
+    sb.from("channels").select("*").eq("id", channelId).single().then(function(res){
+      var c = res.data;
+      if(!c){ container.innerHTML = emptyState("Canale non trovato."); return; }
+      var isOwner = state.session && state.session.user.id === c.owner_id;
+      var isSubscribed = state.mySubscriptions.indexOf(c.id) !== -1;
+
+      sb.from("subscriptions").select("id", {count:"exact", head:true}).eq("channel_id", c.id).then(function(countRes){
+        var subCount = countRes.count || 0;
+        container.innerHTML =
+          '<div class="channel-header">' +
+            '<div class="channel-avatar-lg" style="background:' + c.avatar_color + '">' + initials(c.name) + '</div>' +
+            '<div class="channel-name">' + esc(c.name) + '</div>' +
+            '<div class="channel-handle">@' + esc(c.handle) + '</div>' +
+            '<div class="channel-stats">' + subCount + ' iscritti</div>' +
+            (c.description ? '<div class="channel-desc">' + esc(c.description) + '</div>' : '') +
+            '<div class="channel-actions">' +
+              (isOwner ? '' : '<button class="btn ' + (isSubscribed ? "btn-ghost" : "btn-violet") + ' btn-sm" id="sub-btn">' + (isSubscribed ? "Iscritto" : "Iscriviti") + '</button>') +
+            '</div>' +
+          '</div>' +
+          '<div class="section-title">Video</div>' +
+          '<div id="channel-videos"></div>';
+
+        if(!isOwner){
+          el("sub-btn").addEventListener("click", function(){
+            if(!state.session){ showAuthRequired(); return; }
+            toggleSubscription(c.id, el("sub-btn"));
+          });
+        }
+
+        sb.from("videos").select("*, channels(name, handle, avatar_color, owner_id)")
+          .eq("channel_id", c.id).order("created_at",{ascending:false}).then(function(vres){
+            var box = el("channel-videos");
+            if(!vres.data || vres.data.length === 0){
+              box.innerHTML = emptyState("Nessun video pubblicato.");
+              return;
+            }
+            box.innerHTML = vres.data.map(renderVideoCard).join("");
+            attachVideoCardListeners(box);
+          });
+      });
+    });
+  }
+  function toggleSubscription(channelId, btn){
+    var isSubscribed = state.mySubscriptions.indexOf(channelId) !== -1;
+    if(isSubscribed){
+      sb.from("subscriptions").delete().eq("subscriber_id", state.session.user.id).eq("channel_id", channelId).then(function(){
+        state.mySubscriptions = state.mySubscriptions.filter(function(id){ return id !== channelId; });
+        btn.textContent = "Iscriviti";
+        btn.className = "btn btn-violet btn-sm";
+      });
+    } else {
+      sb.from("subscriptions").insert({subscriber_id: state.session.user.id, channel_id: channelId}).then(function(){
+        state.mySubscriptions.push(channelId);
+        btn.textContent = "Iscritto";
+        btn.className = "btn btn-ghost btn-sm";
+      });
+    }
+  }
+
+  /* ---------------- Video page ---------------- */
+  function openVideo(videoId){
+    showView("video");
+    var container = el("view-video");
+    container.innerHTML = '<div class="progress-ring-wrap"><div class="spinner"></div></div>';
+
+    sb.from("videos").select("*, channels(*)").eq("id", videoId).single().then(function(res){
+      var v = res.data;
+      if(!v){ container.innerHTML = emptyState("Video non trovato."); return; }
+      var ch = v.channels || {};
+      sb.from("videos").update({ views: (v.views || 0) + 1 }).eq("id", v.id).then(function(){});
+
+      var isSubscribed = state.mySubscriptions.indexOf(ch.id) !== -1;
+      var isOwnChannel = state.session && ch.owner_id === state.session.user.id;
+
+      container.innerHTML =
+        '<div class="player-wrap"><video controls playsinline poster="' + esc(v.thumbnail_url || "") + '" src="' + esc(v.video_url) + '"></video></div>' +
+        '<div style="padding:16px;">' +
+        '<div class="vp-title">' + esc(v.title) + '</div>' +
+        '<div class="vp-sub">' + fmtViews((v.views||0)+1) + ' &middot; ' + timeAgo(v.created_at) + '</div>' +
+        '<div class="vp-channel-row">' +
+          '<div class="avatar" style="background:' + ch.avatar_color + '" id="vp-channel-avatar">' + initials(ch.name) + '</div>' +
+          '<div style="flex:1;" id="vp-channel-name"><div style="font-weight:600;font-size:14.5px;">' + esc(ch.name) + '</div></div>' +
+          (isOwnChannel ? '' : '<button class="btn ' + (isSubscribed ? "btn-ghost" : "btn-violet") + ' btn-sm" id="vp-sub-btn">' + (isSubscribed ? "Iscritto" : "Iscriviti") + '</button>') +
+        '</div>' +
+        '<div class="vp-actions"><button class="like-btn" id="like-btn"><svg viewBox="0 0 24 24" fill="none"><path d="M12 21s-7-4.5-9.5-9C1 8 2.5 4.5 6 4.5c2 0 3.5 1.2 4.3 2.4C11.1 5.5 12.5 4.5 14.5 4.5 18 4.5 19.5 8 18.5 12c-2.5 4.5-6.5 9-6.5 9Z" stroke="currentColor" stroke-width="1.8"/></svg><span id="like-count">0</span></button></div>' +
+        (v.description ? '<div class="vp-desc">' + esc(v.description) + '</div>' : '') +
+        '<div class="section-title">Commenti</div>' +
+        (state.session ? '<div class="comment-form"><input type="text" id="comment-input" placeholder="Aggiungi un commento..."><button id="comment-submit">Invia</button></div>' : '') +
+        '<div id="comments-list"></div>' +
+        '</div>';
+
+      if(!isOwnChannel){
+        el("vp-channel-avatar").addEventListener("click", function(){ openChannel(ch.id); });
+        el("vp-channel-name").addEventListener("click", function(){ openChannel(ch.id); });
+        var subBtn = el("vp-sub-btn");
+        if(subBtn) subBtn.addEventListener("click", function(){
+          if(!state.session){ showAuthRequired(); return; }
+          toggleSubscription(ch.id, subBtn);
+        });
+      } else {
+        el("vp-channel-avatar").addEventListener("click", function(){ openChannel(ch.id); });
+        el("vp-channel-name").addEventListener("click", function(){ openChannel(ch.id); });
+      }
+
+      loadLikes(v.id);
+      loadComments(v.id);
+
+      if(state.session){
+        var input = el("comment-input");
+        el("comment-submit").addEventListener("click", function(){ submitComment(v.id, input); });
+        input.addEventListener("keydown", function(e){ if(e.key === "Enter") submitComment(v.id, input); });
+      }
+    });
+  }
+
+  function loadLikes(videoId){
+    sb.from("likes").select("id", {count:"exact", head:true}).eq("video_id", videoId).then(function(res){
+      el("like-count").textContent = res.count || 0;
+    });
+    if(!state.session) return;
+    sb.from("likes").select("id").eq("video_id", videoId).eq("user_id", state.session.user.id).maybeSingle().then(function(res){
+      var btn = el("like-btn");
+      if(res.data){
+        btn.classList.add("liked");
+        btn.setAttribute("data-liked", "true");
+      }
+      btn.addEventListener("click", function(){
+        toggleLike(videoId, btn);
+      });
+    });
+  }
+  function toggleLike(videoId, btn){
+    if(!state.session){ showAuthRequired(); return; }
+    var liked = btn.getAttribute("data-liked") === "true";
+    var countEl = el("like-count");
+    if(liked){
+      sb.from("likes").delete().eq("video_id", videoId).eq("user_id", state.session.user.id).then(function(){
+        btn.classList.remove("liked");
+        btn.setAttribute("data-liked","false");
+        countEl.textContent = Math.max(0, parseInt(countEl.textContent,10) - 1);
+      });
+    } else {
+      sb.from("likes").insert({video_id: videoId, user_id: state.session.user.id}).then(function(){
+        btn.classList.add("liked");
+        btn.setAttribute("data-liked","true");
+        countEl.textContent = parseInt(countEl.textContent,10) + 1;
+      });
+    }
+  }
+
+  function loadComments(videoId){
+    var box = el("comments-list");
+    sb.from("comments").select("*, profiles(username, avatar_color)").eq("video_id", videoId)
+      .order("created_at",{ascending:false}).then(function(res){
+        var comments = res.data || [];
+        if(comments.length === 0){
+          box.innerHTML = '<p style="font-size:13px;color:var(--text-faint);">Nessun commento ancora.</p>';
+          return;
+        }
+        box.innerHTML = comments.map(function(c){
+          var p = c.profiles || {};
+          return '<div class="comment">' +
+            '<div class="avatar" style="background:' + (p.avatar_color || "#7c5cff") + '">' + initials(p.username) + '</div>' +
+            '<div class="comment-body"><div class="comment-author">' + esc(p.username) + '<span class="comment-time">' + timeAgo(c.created_at) + '</span></div>' +
+            '<div class="comment-text">' + esc(c.content) + '</div></div>' +
+          '</div>';
+        }).join("");
+      });
+  }
+  function submitComment(videoId, input){
+    var text = input.value.trim();
+    if(!text) return;
+    input.value = "";
+    sb.from("comments").insert({video_id: videoId, user_id: state.session.user.id, content: text}).then(function(res){
+      if(res.error){ alert("Errore: " + res.error.message); return; }
+      loadComments(videoId);
+    });
+  }
+
+  /* ---------------- Upload ---------------- */
+  var uploadState = { file:null, channelId:null };
+  function renderUpload(){
+    var container = el("view-upload");
+    if(state.myChannels.length === 0){
+      container.innerHTML = '<h1 class="page-title">Carica video</h1>' +
+        emptyState("Devi prima creare un canale.") +
+        '<button class="btn btn-primary" id="create-first-channel">Crea il tuo canale</button>';
+      el("create-first-channel").addEventListener("click", function(){
+        openCreateChannelFlow();
+        setTimeout(renderUpload, 400);
+      });
+      return;
+    }
+    uploadState = { file:null, channelId: state.myChannels[0].id };
+    container.innerHTML =
+      '<h1 class="page-title">Carica video</h1>' +
+      '<div class="channel-select" id="channel-select"></div>' +
+      '<div class="upload-drop" id="drop-zone">' + iconUpload() + '<p>Tocca per scegliere un video</p></div>' +
+      '<input type="file" id="file-input" accept="video/*" style="display:none;">' +
+      '<div class="field"><label>Titolo</label><input type="text" id="video-title" placeholder="Dai un titolo al tuo video"></div>' +
+      '<div class="field"><label>Descrizione (opzionale)</label><textarea id="video-desc" placeholder="Racconta di cosa parla il video..."></textarea></div>' +
+      '<button class="btn btn-primary" id="publish-btn">Pubblica</button>';
+
+    var chBox = el("channel-select");
+    chBox.innerHTML = state.myChannels.map(function(c, i){
+      return '<div class="channel-chip ' + (i===0?"selected":"") + '" data-channel-id="' + c.id + '">' +
+        '<div class="avatar" style="background:' + c.avatar_color + '">' + initials(c.name) + '</div>' + esc(c.name) + '</div>';
+    }).join("");
+    chBox.querySelectorAll(".channel-chip").forEach(function(chip){
+      chip.addEventListener("click", function(){
+        chBox.querySelectorAll(".channel-chip").forEach(function(x){ x.classList.remove("selected"); });
+        chip.classList.add("selected");
+        uploadState.channelId = chip.getAttribute("data-channel-id");
+      });
+    });
+
+    var dropZone = el("drop-zone");
+    var fileInput = el("file-input");
+    dropZone.addEventListener("click", function(){ fileInput.click(); });
+    fileInput.addEventListener("change", function(){
+      var f = fileInput.files[0];
+      if(!f) return;
+      uploadState.file = f;
+      dropZone.classList.add("has-file");
+      dropZone.innerHTML = iconUpload() + '<p>' + esc(f.name) + '</p>';
+    });
+
+    el("publish-btn").addEventListener("click", function(){ doPublish(container); });
+  }
+  function iconUpload(){
+    return '<svg viewBox="0 0 24 24" fill="none"><path d="M12 16V4m0 0-4 4m4-4 4 4M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  }
+
+  function doPublish(container){
+    var title = el("video-title").value.trim();
+    if(!uploadState.file){ alert("Scegli un file video."); return; }
+    if(!title){ alert("Inserisci un titolo."); return; }
+    if(!uploadState.channelId){ alert("Seleziona un canale."); return; }
+    var description = el("video-desc").value.trim();
+
+    container.innerHTML = '<div class="progress-ring-wrap"><div class="spinner"></div><p style="color:var(--text-muted);font-size:13.5px;">Caricamento in corso...</p></div>';
+
+    var file = uploadState.file;
+    var ext = file.name.split(".").pop();
+    var path = state.session.user.id + "/" + Date.now() + "." + ext;
+
+    sb.storage.from("videos").upload(path, file).then(function(uploadRes){
+      if(uploadRes.error){
+        container.innerHTML = emptyState("Errore durante il caricamento: " + uploadRes.error.message);
+        return;
+      }
+      var videoUrl = sb.storage.from("videos").getPublicUrl(path).data.publicUrl;
+      generateThumbnail(file, function(thumbBlob, duration){
+        if(!thumbBlob){
+          insertVideoRow(videoUrl, null, duration);
+          return;
+        }
+        var thumbPath = state.session.user.id + "/" + Date.now() + "_thumb.jpg";
+        sb.storage.from("thumbnails").upload(thumbPath, thumbBlob).then(function(thumbRes){
+          var thumbUrl = null;
+          if(!thumbRes.error){
+            thumbUrl = sb.storage.from("thumbnails").getPublicUrl(thumbPath).data.publicUrl;
+          }
+          insertVideoRow(videoUrl, thumbUrl, duration);
+        });
+      });
+    });
+
+    function insertVideoRow(videoUrl, thumbUrl, duration){
+      sb.from("videos").insert({
+        channel_id: uploadState.channelId,
+        title: title,
+        description: description,
+        video_url: videoUrl,
+        thumbnail_url: thumbUrl,
+        duration_seconds: Math.round(duration || 0)
+      }).select().single().then(function(res){
+        if(res.error){
+          container.innerHTML = emptyState("Errore: " + res.error.message);
+          return;
+        }
+        state.history = [];
+        showView("video", false);
+        openVideo(res.data.id);
+      });
+    }
+  }
+
+  function generateThumbnail(file, callback){
+    try{
+      var videoEl = document.createElement("video");
+      videoEl.preload = "metadata";
+      videoEl.muted = true;
+      videoEl.playsInline = true;
+      var url = URL.createObjectURL(file);
+      videoEl.src = url;
+      var settled = false;
+      videoEl.addEventListener("loadedmetadata", function(){
+        var duration = videoEl.duration;
+        var seekTo = Math.min(1, duration / 2);
+        videoEl.currentTime = seekTo;
+      });
+      videoEl.addEventListener("seeked", function(){
+        if(settled) return;
+        settled = true;
+        try{
+          var canvas = document.createElement("canvas");
+          canvas.width = videoEl.videoWidth || 640;
+          canvas.height = videoEl.videoHeight || 360;
+          var ctx = canvas.getContext("2d");
+          ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+          canvas.toBlob(function(blob){
+            URL.revokeObjectURL(url);
+            callback(blob, videoEl.duration);
+          }, "image/jpeg", 0.82);
+        } catch(e){
+          URL.revokeObjectURL(url);
+          callback(null, videoEl.duration || 0);
+        }
+      });
+      videoEl.addEventListener("error", function(){
+        if(settled) return;
+        settled = true;
+        URL.revokeObjectURL(url);
+        callback(null, 0);
+      });
+      setTimeout(function(){
+        if(!settled){
+          settled = true;
+          URL.revokeObjectURL(url);
+          callback(null, 0);
+        }
+      }, 8000);
+    } catch(e){
+      callback(null, 0);
+    }
+  }
+
+  /* ---------------- Boot ---------------- */
+  sb.auth.getSession().then(function(res){
+    if(res.data && res.data.session){
+      onAuthReady(res.data.session);
+    } else {
+      el("auth-screen").classList.remove("hidden");
+    }
+  });
+
+  sb.auth.onAuthStateChange(function(event, session){
+    if(event === "SIGNED_OUT"){
+      state.session = null;
+    }
+  });
+
+})();
+</script>
+</body>
+</html>
