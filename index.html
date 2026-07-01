@@ -735,6 +735,11 @@
     if(video){ video.pause(); }
     viewer.classList.remove("active");
     viewer.innerHTML = "";
+    if(state.currentView === "shorts"){
+      state.history = [];
+      showView("home", false);
+      renderHome();
+    }
   }
 
   function renderShortsTab(){
@@ -753,6 +758,7 @@
             emptyState("Nessuno Short pubblicato ancora.");
           return;
         }
+        container.innerHTML = '<h1 class="page-title">Shorts</h1>';
         openShortsViewer(0);
       });
   }
