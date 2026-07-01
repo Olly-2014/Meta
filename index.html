@@ -581,7 +581,7 @@
     feedList.innerHTML = '<div class="progress-ring-wrap"><div class="spinner"></div></div>';
 
     sb.from("videos")
-      .select("*, channels(name, handle, avatar_color, owner_id)")
+      .select("*, channels(name, handle, avatar_color, owner_id), profiles(username, avatar_color)")
       .eq("is_short", false)
       .order("created_at", { ascending: false })
       .limit(30)
@@ -603,7 +603,7 @@
     var box = el("shorts-section");
     if(!box) return;
     sb.from("videos")
-      .select("*, channels(name, handle, avatar_color, owner_id)")
+      .select("*, channels(name, handle, avatar_color, owner_id), profiles(username, avatar_color)")
       .eq("is_short", true)
       .order("created_at", { ascending: false })
       .limit(15)
@@ -671,9 +671,9 @@
   function renderShortSlide(index){
     if(state.shortPhotoTimer){ clearTimeout(state.shortPhotoTimer); state.shortPhotoTimer = null; }
     var s = state.shortsList[index];
-    var ch = s.channels || {};
+    var author = authorOf(s);
     var isPhoto = s.media_type === "photo";
-    var isSubscribed = state.mySubscriptions.indexOf(ch.id) !== -1;
+    var isSubscribed = author.kind === "channel" && state.mySubscriptions.indexOf(author.id) !== -1;
     var container = el("shorts-slide-container");
     var filterCss = filterCssById(s.filter_name);
     var mediaTag = isPhoto
@@ -685,16 +685,18 @@
         renderOverlaysHtml(s.text_overlays) +
         '<div class="shorts-tap-zone" id="shorts-tap"></div>' +
         '<div class="shorts-info">' +
-          '<div class="sh-channel"><div class="avatar" style="width:30px;height:30px;font-size:12px;background:' + ch.avatar_color + '">' + initials(ch.name) + '</div>' + esc(ch.name) + '</div>' +
+          '<div class="sh-channel" id="short-author-row"><div class="avatar" style="width:30px;height:30px;font-size:12px;background:' + author.color + '">' + initials(author.name) + '</div>' + esc(author.name) + '</div>' +
           '<div class="sh-title">' + esc(s.title) + '</div>' +
         '</div>' +
         '<div class="shorts-actions">' +
           '<button id="short-comment-btn"><svg viewBox="0 0 24 24" fill="none"><path d="M4 5h16v11H8l-4 4V5Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg><span id="short-comment-count">0</span></button>' +
           '<button id="short-share-btn"><svg viewBox="0 0 24 24" fill="none"><path d="M4 12v6a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-6M16 6l-4-4-4 4M12 2v14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Condividi</span></button>' +
           '<button id="short-like-btn"><svg viewBox="0 0 24 24" fill="none"><path d="M12 21s-7-4.5-9.5-9C1 8 2.5 4.5 6 4.5c2 0 3.5 1.2 4.3 2.4C11.1 5.5 12.5 4.5 14.5 4.5 18 4.5 19.5 8 18.5 12c-2.5 4.5-6.5 9-6.5 9Z" stroke="currentColor" stroke-width="1.8"/></svg><span id="short-like-count">0</span></button>' +
-          (isSubscribed ? '' : '<button id="short-sub-btn"><svg viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg><span>Iscriviti</span></button>') +
+          (author.kind === "channel" && !isSubscribed ? '<button id="short-sub-btn"><svg viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg><span>Iscriviti</span></button>' : '') +
         '</div>' +
       '</div>';
+
+    el("short-author-row").addEventListener("click", function(){ openShortsAuthorFromCurrent(author); });
 
     sb.from("comments").select("id", {count:"exact", head:true}).eq("video_id", s.id).then(function(cres){
       var el2 = el("short-comment-count");
@@ -792,11 +794,16 @@
     if(subBtn){
       subBtn.addEventListener("click", function(){
         if(!state.session){ showAuthRequired(); return; }
-        toggleSubscription(ch.id, subBtn);
+        toggleSubscription(author.id, subBtn);
       });
     }
 
     sb.from("videos").update({ views: (s.views || 0) + 1 }).eq("id", s.id).then(function(){});
+  }
+
+  function openShortsAuthorFromCurrent(author){
+    closeShortsViewer();
+    openAuthor(author);
   }
 
   function closeShortsViewer(){
@@ -901,7 +908,7 @@
     var container = el("view-shorts");
     container.innerHTML = '<h1 class="page-title">Shorts</h1><div class="progress-ring-wrap"><div class="spinner"></div></div>';
     sb.from("videos")
-      .select("*, channels(name, handle, avatar_color, owner_id)")
+      .select("*, channels(name, handle, avatar_color, owner_id), profiles(username, avatar_color)")
       .eq("is_short", true)
       .order("created_at", { ascending: false })
       .limit(50)
@@ -919,8 +926,8 @@
   }
 
   function renderVideoCard(v, deletable){
-    var ch = v.channels || {};
-    var color = ch.avatar_color || "#7c5cff";
+    var author = authorOf(v);
+    var color = author.color;
     var isPhoto = v.media_type === "photo";
     var filterCss = filterCssById(v.filter_name);
     var thumbHtml = v.thumbnail_url
@@ -937,10 +944,10 @@
       '<div class="thumb-wrap">' + thumbHtml + badge + renderOverlaysHtml(v.text_overlays) + deleteBtn +
       '</div>' +
       '<div class="vc-meta">' +
-        '<div class="avatar" style="background:' + color + '">' + initials(ch.name) + '</div>' +
+        '<div class="avatar" style="background:' + color + '">' + initials(author.name) + '</div>' +
         '<div class="vc-text">' +
           '<p class="vc-title">' + esc(v.title) + '</p>' +
-          '<p class="vc-sub">' + esc(ch.name || "") + '<span class="dot">&middot;</span>' + fmtViews(v.views) + '<span class="dot">&middot;</span>' + timeAgo(v.created_at) + '</p>' +
+          '<p class="vc-sub">' + esc(author.name || "") + '<span class="dot">&middot;</span>' + fmtViews(v.views) + '<span class="dot">&middot;</span>' + timeAgo(v.created_at) + '</p>' +
         '</div>' +
       '</div>' +
     '</div>';
@@ -1008,7 +1015,7 @@
   }
   function doSearch(q, box){
     box.innerHTML = '<div class="progress-ring-wrap"><div class="spinner"></div></div>';
-    sb.from("videos").select("*, channels(name, handle, avatar_color, owner_id)")
+    sb.from("videos").select("*, channels(name, handle, avatar_color, owner_id), profiles(username, avatar_color)")
       .ilike("title", "%" + q + "%").limit(20).then(function(res){
         var videos = res.data || [];
         if(videos.length === 0){
@@ -1050,7 +1057,7 @@
   function renderSubsFeed(channelIds){
     if(channelIds.length === 0) return;
     var box = el("subs-list");
-    sb.from("videos").select("*, channels(name, handle, avatar_color, owner_id)")
+    sb.from("videos").select("*, channels(name, handle, avatar_color, owner_id), profiles(username, avatar_color)")
       .in("channel_id", channelIds).order("created_at",{ascending:false}).limit(20).then(function(res){
         if(res.data && res.data.length > 0){
           box.innerHTML += '<div class="section-title">Video recenti</div>' + res.data.map(renderVideoCard).join("");
@@ -1322,6 +1329,36 @@
   }
 
   /* ---------------- Channel page ---------------- */
+  function openUserProfile(userId){
+    showView("channel");
+    var container = el("view-channel");
+    container.innerHTML = '<div class="progress-ring-wrap"><div class="spinner"></div></div>';
+    sb.from("profiles").select("*").eq("id", userId).single().then(function(res){
+      var p = res.data;
+      if(!p){ container.innerHTML = emptyState("Profilo non trovato."); return; }
+      var isOwner = state.session && state.session.user.id === p.id;
+      container.innerHTML =
+        '<div class="channel-header">' +
+          '<div class="channel-avatar-lg" style="background:' + p.avatar_color + '">' + initials(p.username) + '</div>' +
+          '<div class="channel-name">' + esc(p.username) + '</div>' +
+          '<div class="channel-handle">Pubblica dal profilo, senza canale</div>' +
+        '</div>' +
+        '<div class="section-title">Post</div>' +
+        '<div id="channel-videos"></div>';
+
+      sb.from("videos").select("*, channels(name, handle, avatar_color, owner_id), profiles(username, avatar_color)")
+        .eq("owner_id", p.id).order("created_at",{ascending:false}).then(function(vres){
+          var box = el("channel-videos");
+          if(!vres.data || vres.data.length === 0){
+            box.innerHTML = emptyState("Nessun contenuto pubblicato.");
+            return;
+          }
+          box.innerHTML = vres.data.map(function(v){ return renderVideoCard(v, isOwner); }).join("");
+          attachVideoCardListeners(box);
+        });
+    });
+  }
+
   function openChannel(channelId){
     showView("channel");
     var container = el("view-channel");
@@ -1360,7 +1397,7 @@
           });
         }
 
-        sb.from("videos").select("*, channels(name, handle, avatar_color, owner_id)")
+        sb.from("videos").select("*, channels(name, handle, avatar_color, owner_id), profiles(username, avatar_color)")
           .eq("channel_id", c.id).order("created_at",{ascending:false}).then(function(vres){
             var box = el("channel-videos");
             if(!vres.data || vres.data.length === 0){
@@ -1445,14 +1482,17 @@
     var container = el("view-video");
     container.innerHTML = '<div class="progress-ring-wrap"><div class="spinner"></div></div>';
 
-    sb.from("videos").select("*, channels(*)").eq("id", videoId).single().then(function(res){
+    sb.from("videos").select("*, channels(*), profiles(username, avatar_color)").eq("id", videoId).single().then(function(res){
       var v = res.data;
       if(!v){ container.innerHTML = emptyState("Video non trovato."); return; }
-      var ch = v.channels || {};
+      var author = authorOf(v);
       sb.from("videos").update({ views: (v.views || 0) + 1 }).eq("id", v.id).then(function(){});
 
-      var isSubscribed = state.mySubscriptions.indexOf(ch.id) !== -1;
-      var isOwnChannel = state.session && ch.owner_id === state.session.user.id;
+      var isSubscribed = author.kind === "channel" && state.mySubscriptions.indexOf(author.id) !== -1;
+      var isOwnAuthor = state.session && (
+        (author.kind === "channel" && v.channels && v.channels.owner_id === state.session.user.id) ||
+        (author.kind === "profile" && author.id === state.session.user.id)
+      );
       var filterCss = filterCssById(v.filter_name);
       var mediaHtml = v.media_type === "photo"
         ? '<div class="player-wrap" style="position:relative;"><img src="' + esc(v.video_url) + '" style="width:100%;display:block;max-height:70vh;object-fit:contain;background:#000;filter:' + filterCss + ';">' + renderOverlaysHtml(v.text_overlays) + '</div>'
@@ -1464,9 +1504,9 @@
         '<div class="vp-title">' + esc(v.title) + '</div>' +
         '<div class="vp-sub">' + fmtViews((v.views||0)+1) + ' &middot; ' + timeAgo(v.created_at) + '</div>' +
         '<div class="vp-channel-row">' +
-          '<div class="avatar" style="background:' + ch.avatar_color + '" id="vp-channel-avatar">' + initials(ch.name) + '</div>' +
-          '<div style="flex:1;" id="vp-channel-name"><div style="font-weight:600;font-size:14.5px;">' + esc(ch.name) + '</div></div>' +
-          (isOwnChannel ? '' : '<button class="btn ' + (isSubscribed ? "btn-ghost" : "btn-violet") + ' btn-sm" id="vp-sub-btn">' + (isSubscribed ? "Iscritto" : "Iscriviti") + '</button>') +
+          '<div class="avatar" style="background:' + author.color + '" id="vp-channel-avatar">' + initials(author.name) + '</div>' +
+          '<div style="flex:1;" id="vp-channel-name"><div style="font-weight:600;font-size:14.5px;">' + esc(author.name) + '</div></div>' +
+          (isOwnAuthor || author.kind !== "channel" ? '' : '<button class="btn ' + (isSubscribed ? "btn-ghost" : "btn-violet") + ' btn-sm" id="vp-sub-btn">' + (isSubscribed ? "Iscritto" : "Iscriviti") + '</button>') +
         '</div>' +
         '<div class="vp-actions"><button class="like-btn" id="like-btn"><svg viewBox="0 0 24 24" fill="none"><path d="M12 21s-7-4.5-9.5-9C1 8 2.5 4.5 6 4.5c2 0 3.5 1.2 4.3 2.4C11.1 5.5 12.5 4.5 14.5 4.5 18 4.5 19.5 8 18.5 12c-2.5 4.5-6.5 9-6.5 9Z" stroke="currentColor" stroke-width="1.8"/></svg><span id="like-count">0</span></button></div>' +
         (v.description ? '<div class="vp-desc">' + esc(v.description) + '</div>' : '') +
@@ -1475,18 +1515,13 @@
         '<div id="comments-list"></div>' +
         '</div>';
 
-      if(!isOwnChannel){
-        el("vp-channel-avatar").addEventListener("click", function(){ openChannel(ch.id); });
-        el("vp-channel-name").addEventListener("click", function(){ openChannel(ch.id); });
-        var subBtn = el("vp-sub-btn");
-        if(subBtn) subBtn.addEventListener("click", function(){
-          if(!state.session){ showAuthRequired(); return; }
-          toggleSubscription(ch.id, subBtn);
-        });
-      } else {
-        el("vp-channel-avatar").addEventListener("click", function(){ openChannel(ch.id); });
-        el("vp-channel-name").addEventListener("click", function(){ openChannel(ch.id); });
-      }
+      el("vp-channel-avatar").addEventListener("click", function(){ openAuthor(author); });
+      el("vp-channel-name").addEventListener("click", function(){ openAuthor(author); });
+      var subBtn = el("vp-sub-btn");
+      if(subBtn) subBtn.addEventListener("click", function(){
+        if(!state.session){ showAuthRequired(); return; }
+        toggleSubscription(author.id, subBtn);
+      });
 
       loadLikes(v.id);
       loadComments(v.id);
@@ -1567,17 +1602,14 @@
   var uploadState = { file:null, channelId:null };
   function renderUpload(){
     var container = el("view-upload");
-    if(state.myChannels.length === 0){
-      container.innerHTML = '<h1 class="page-title">Carica video</h1>' +
-        emptyState("Devi prima creare un canale.") +
-        '<button class="btn btn-primary" id="create-first-channel">Crea il tuo canale</button>';
-      el("create-first-channel").addEventListener("click", function(){
-        openCreateChannelFlow();
-        setTimeout(renderUpload, 400);
-      });
-      return;
-    }
-    uploadState = { file:null, channelId: state.myChannels[0].id, isShort: false, mediaType: "video" };
+    var hasChannels = state.myChannels.length > 0;
+    uploadState = {
+      file: null,
+      channelId: hasChannels ? state.myChannels[0].id : null,
+      publishMode: hasChannels ? "channel" : "profile",
+      isShort: false,
+      mediaType: "video"
+    };
     container.innerHTML =
       '<h1 class="page-title">Carica contenuto</h1>' +
       '<div class="auth-toggle" id="media-type-toggle" style="margin-bottom:18px;">' +
@@ -1629,15 +1661,24 @@
     });
 
     var chBox = el("channel-select");
-    chBox.innerHTML = state.myChannels.map(function(c, i){
-      return '<div class="channel-chip ' + (i===0?"selected":"") + '" data-channel-id="' + c.id + '">' +
+    var profileChip = '<div class="channel-chip ' + (hasChannels ? "" : "selected") + '" data-channel-id="__profile__">' +
+      '<div class="avatar" style="background:' + (state.profile ? state.profile.avatar_color : "#7c5cff") + '">' + initials(state.profile ? state.profile.username : "?") + '</div>Senza canale</div>';
+    chBox.innerHTML = profileChip + state.myChannels.map(function(c, i){
+      return '<div class="channel-chip ' + (hasChannels && i===0 ? "selected" : "") + '" data-channel-id="' + c.id + '">' +
         '<div class="avatar" style="background:' + c.avatar_color + '">' + initials(c.name) + '</div>' + esc(c.name) + '</div>';
     }).join("");
     chBox.querySelectorAll(".channel-chip").forEach(function(chip){
       chip.addEventListener("click", function(){
         chBox.querySelectorAll(".channel-chip").forEach(function(x){ x.classList.remove("selected"); });
         chip.classList.add("selected");
-        uploadState.channelId = chip.getAttribute("data-channel-id");
+        var val = chip.getAttribute("data-channel-id");
+        if(val === "__profile__"){
+          uploadState.publishMode = "profile";
+          uploadState.channelId = null;
+        } else {
+          uploadState.publishMode = "channel";
+          uploadState.channelId = val;
+        }
       });
     });
 
@@ -1686,6 +1727,20 @@
     return overlays.map(function(o){
       return '<div class="media-text-overlay" style="left:' + o.x + '%;top:' + o.y + '%;color:' + esc(o.color) + ';">' + esc(o.text) + '</div>';
     }).join("");
+  }
+
+  function authorOf(v){
+    if(v.channel_id && v.channels){
+      return { kind: "channel", id: v.channel_id, name: v.channels.name, color: v.channels.avatar_color || "#7c5cff" };
+    }
+    if(v.owner_id && v.profiles){
+      return { kind: "profile", id: v.owner_id, name: v.profiles.username, color: v.profiles.avatar_color || "#7c5cff" };
+    }
+    return { kind: "channel", id: v.channel_id, name: "", color: "#7c5cff" };
+  }
+  function openAuthor(a){
+    if(a.kind === "profile") openUserProfile(a.id);
+    else openChannel(a.id);
   }
 
   function openMediaEditor(file, mediaType){
@@ -1833,7 +1888,7 @@
     var title = el("video-title").value.trim();
     if(!uploadState.file){ alert(uploadState.mediaType === "photo" ? "Scegli una foto." : "Scegli un file video."); return; }
     if(!title){ alert("Inserisci un titolo."); return; }
-    if(!uploadState.channelId){ alert("Seleziona un canale."); return; }
+    if(uploadState.publishMode === "channel" && !uploadState.channelId){ alert("Seleziona un canale."); return; }
     var description = el("video-desc").value.trim();
 
     container.innerHTML = '<div class="progress-ring-wrap"><div class="spinner"></div><p style="color:var(--text-muted);font-size:13.5px;">Caricamento in corso...</p></div>';
@@ -1878,7 +1933,8 @@
 
     function insertVideoRow(videoUrl, thumbUrl, duration){
       sb.from("videos").insert({
-        channel_id: uploadState.channelId,
+        channel_id: uploadState.publishMode === "channel" ? uploadState.channelId : null,
+        owner_id: uploadState.publishMode === "profile" ? state.session.user.id : null,
         title: title,
         description: description,
         video_url: videoUrl,
