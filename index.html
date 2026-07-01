@@ -193,6 +193,40 @@
   .section-title{font-size:13px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.04em;margin:22px 0 12px;}
   .list-channel{display:flex;align-items:center;gap:12px;padding:12px;margin-bottom:8px;}
   .list-channel .avatar{width:44px;height:44px;font-size:16px;}
+
+  /* ---------- Shorts ---------- */
+  .shorts-rail{display:flex;gap:10px;overflow-x:auto;padding-bottom:4px;margin-bottom:22px;-webkit-overflow-scrolling:touch;}
+  .shorts-rail::-webkit-scrollbar{display:none;}
+  .short-card{flex-shrink:0;width:118px;aspect-ratio:9/16;border-radius:16px;overflow:hidden;position:relative;background:#141420;}
+  .short-card img,.short-card video{width:100%;height:100%;object-fit:cover;display:block;}
+  .short-card .short-title{position:absolute;bottom:0;left:0;right:0;padding:8px;font-size:11.5px;font-weight:600;color:#fff;
+    background:linear-gradient(to top, rgba(0,0,0,0.75), transparent);line-height:1.25;
+    display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+  .short-card .short-play{position:absolute;top:8px;right:8px;width:20px;height:20px;color:#fff;opacity:0.9;}
+  .shorts-header{display:flex;align-items:center;gap:8px;margin:22px 0 12px;}
+  .shorts-header svg{width:18px;height:18px;color:var(--ember);}
+  .shorts-header span{font-size:13px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.04em;}
+
+  #shorts-viewer{position:fixed;inset:0;background:#000;z-index:200;display:none;flex-direction:column;}
+  #shorts-viewer.active{display:flex;}
+  .shorts-slide{position:relative;width:100%;height:100%;flex-shrink:0;display:flex;align-items:center;justify-content:center;}
+  .shorts-slide video{width:100%;height:100%;object-fit:contain;background:#000;}
+  .shorts-close{position:absolute;top:calc(var(--safe-top) + 14px);left:16px;z-index:5;width:36px;height:36px;border-radius:50%;
+    background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;color:#fff;border:none;}
+  .shorts-info{position:absolute;left:16px;right:80px;bottom:calc(var(--safe-bottom) + 26px);color:#fff;z-index:5;}
+  .shorts-info .sh-channel{display:flex;align-items:center;gap:8px;font-weight:700;font-size:14px;margin-bottom:8px;}
+  .shorts-info .sh-title{font-size:13.5px;line-height:1.4;color:#f0f0f2;
+    display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+  .shorts-actions{position:absolute;right:12px;bottom:calc(var(--safe-bottom) + 26px);display:flex;flex-direction:column;
+    align-items:center;gap:22px;z-index:5;}
+  .shorts-actions button{background:none;border:none;color:#fff;display:flex;flex-direction:column;align-items:center;gap:4px;}
+  .shorts-actions svg{width:28px;height:28px;}
+  .shorts-actions span{font-size:11px;font-weight:600;}
+  .shorts-actions .liked svg{color:var(--ember);}
+  .shorts-tap-zone{position:absolute;inset:0;z-index:2;}
+  .shorts-progress{position:absolute;top:var(--safe-top);left:0;right:0;display:flex;gap:4px;padding:10px 12px;z-index:5;}
+  .shorts-progress .seg{flex:1;height:2.5px;border-radius:2px;background:rgba(255,255,255,0.3);overflow:hidden;}
+  .shorts-progress .seg.done{background:rgba(255,255,255,0.9);}
   .list-channel-name{font-weight:600;font-size:14.5px;}
   .list-channel-handle{font-size:12px;color:var(--text-muted);}
 </style>
@@ -266,6 +300,8 @@
   </div>
 </div>
 
+<div id="shorts-viewer"></div>
+
 <script>
 (function(){
   "use strict";
@@ -281,7 +317,9 @@
     mySubscriptions: [],
     currentView: "home",
     history: [],
-    channelColors: ["#7c5cff","#3d8bff","#2ecc71","#ffb020","#ff4d94","#22c3d6"]
+    channelColors: ["#7c5cff","#3d8bff","#2ecc71","#ffb020","#ff4d94","#22c3d6"],
+    shortsList: [],
+    currentShortIndex: 0
   };
 
   function el(id){ return document.getElementById(id); }
@@ -490,12 +528,14 @@
   /* ---------------- Home / Feed ---------------- */
   function renderHome(){
     var container = el("view-home");
-    container.innerHTML = '<h1 class="page-title">Home</h1><div id="feed-list"></div>';
+    container.innerHTML = '<h1 class="page-title">Home</h1><div id="shorts-section"></div><div id="feed-list"></div>';
+    loadShortsRail();
     var feedList = el("feed-list");
     feedList.innerHTML = '<div class="progress-ring-wrap"><div class="spinner"></div></div>';
 
     sb.from("videos")
       .select("*, channels(name, handle, avatar_color, owner_id)")
+      .eq("is_short", false)
       .order("created_at", { ascending: false })
       .limit(30)
       .then(function(res){
@@ -506,6 +546,119 @@
         feedList.innerHTML = res.data.map(renderVideoCard).join("");
         attachVideoCardListeners(feedList);
       });
+  }
+
+  function openShortsViewer(index){
+    state.currentShortIndex = index;
+    var viewer = el("shorts-viewer");
+    viewer.classList.add("active");
+    viewer.innerHTML = '<div class="shorts-progress" id="shorts-progress"></div>' +
+      '<button class="shorts-close" id="shorts-close"><svg viewBox="0 0 24 24" fill="none"><path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>' +
+      '<div id="shorts-slide-container" style="width:100%;height:100%;"></div>';
+
+    var progressBox = el("shorts-progress");
+    progressBox.innerHTML = state.shortsList.map(function(_, i){
+      return '<div class="seg' + (i <= index ? " done" : "") + '" data-i="' + i + '"></div>';
+    }).join("");
+
+    el("shorts-close").addEventListener("click", closeShortsViewer);
+    renderShortSlide(index);
+
+    var startY = null;
+    viewer.ontouchstart = function(e){ startY = e.touches[0].clientY; };
+    viewer.ontouchend = function(e){
+      if(startY === null) return;
+      var endY = e.changedTouches[0].clientY;
+      var delta = startY - endY;
+      if(Math.abs(delta) > 60){
+        if(delta > 0) goToShort(state.currentShortIndex + 1);
+        else goToShort(state.currentShortIndex - 1);
+      }
+      startY = null;
+    };
+  }
+
+  function goToShort(index){
+    if(index < 0 || index >= state.shortsList.length){
+      if(index >= state.shortsList.length) closeShortsViewer();
+      return;
+    }
+    state.currentShortIndex = index;
+    renderShortSlide(index);
+    var segs = document.querySelectorAll("#shorts-progress .seg");
+    segs.forEach(function(seg, i){ seg.classList.toggle("done", i <= index); });
+  }
+
+  function renderShortSlide(index){
+    var s = state.shortsList[index];
+    var ch = s.channels || {};
+    var isSubscribed = state.mySubscriptions.indexOf(ch.id) !== -1;
+    var container = el("shorts-slide-container");
+    container.innerHTML =
+      '<div class="shorts-slide">' +
+        '<video id="short-video" src="' + esc(s.video_url) + '" poster="' + esc(s.thumbnail_url || "") + '" playsinline autoplay loop muted></video>' +
+        '<div class="shorts-tap-zone" id="shorts-tap"></div>' +
+        '<div class="shorts-info">' +
+          '<div class="sh-channel"><div class="avatar" style="width:30px;height:30px;font-size:12px;background:' + ch.avatar_color + '">' + initials(ch.name) + '</div>' + esc(ch.name) + '</div>' +
+          '<div class="sh-title">' + esc(s.title) + '</div>' +
+        '</div>' +
+        '<div class="shorts-actions">' +
+          '<button id="short-like-btn"><svg viewBox="0 0 24 24" fill="none"><path d="M12 21s-7-4.5-9.5-9C1 8 2.5 4.5 6 4.5c2 0 3.5 1.2 4.3 2.4C11.1 5.5 12.5 4.5 14.5 4.5 18 4.5 19.5 8 18.5 12c-2.5 4.5-6.5 9-6.5 9Z" stroke="currentColor" stroke-width="1.8"/></svg><span id="short-like-count">0</span></button>' +
+          (isSubscribed ? '' : '<button id="short-sub-btn"><svg viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg><span>Iscriviti</span></button>') +
+        '</div>' +
+      '</div>';
+
+    var videoEl = el("short-video");
+    var tapZone = el("shorts-tap");
+    var muted = true;
+    tapZone.addEventListener("click", function(){
+      muted = !muted;
+      videoEl.muted = muted;
+    });
+
+    sb.from("likes").select("id", {count:"exact", head:true}).eq("video_id", s.id).then(function(res){
+      el("short-like-count").textContent = res.count || 0;
+    });
+    var likeBtn = el("short-like-btn");
+    if(state.session){
+      sb.from("likes").select("id").eq("video_id", s.id).eq("user_id", state.session.user.id).maybeSingle().then(function(res){
+        if(res.data) likeBtn.classList.add("liked");
+      });
+    }
+    likeBtn.addEventListener("click", function(){
+      if(!state.session){ showAuthRequired(); return; }
+      var liked = likeBtn.classList.contains("liked");
+      var countEl = el("short-like-count");
+      if(liked){
+        sb.from("likes").delete().eq("video_id", s.id).eq("user_id", state.session.user.id).then(function(){
+          likeBtn.classList.remove("liked");
+          countEl.textContent = Math.max(0, parseInt(countEl.textContent,10) - 1);
+        });
+      } else {
+        sb.from("likes").insert({video_id: s.id, user_id: state.session.user.id}).then(function(){
+          likeBtn.classList.add("liked");
+          countEl.textContent = parseInt(countEl.textContent,10) + 1;
+        });
+      }
+    });
+
+    var subBtn = el("short-sub-btn");
+    if(subBtn){
+      subBtn.addEventListener("click", function(){
+        if(!state.session){ showAuthRequired(); return; }
+        toggleSubscription(ch.id, subBtn);
+      });
+    }
+
+    sb.from("videos").update({ views: (s.views || 0) + 1 }).eq("id", s.id).then(function(){});
+  }
+
+  function closeShortsViewer(){
+    var viewer = el("shorts-viewer");
+    var video = el("short-video");
+    if(video){ video.pause(); }
+    viewer.classList.remove("active");
+    viewer.innerHTML = "";
   }
 
   function renderVideoCard(v){
@@ -941,7 +1094,7 @@
       });
       return;
     }
-    uploadState = { file:null, channelId: state.myChannels[0].id };
+    uploadState = { file:null, channelId: state.myChannels[0].id, isShort: false };
     container.innerHTML =
       '<h1 class="page-title">Carica video</h1>' +
       '<div class="channel-select" id="channel-select"></div>' +
@@ -949,7 +1102,21 @@
       '<input type="file" id="file-input" accept="video/*" style="display:none;">' +
       '<div class="field"><label>Titolo</label><input type="text" id="video-title" placeholder="Dai un titolo al tuo video"></div>' +
       '<div class="field"><label>Descrizione (opzionale)</label><textarea id="video-desc" placeholder="Racconta di cosa parla il video..."></textarea></div>' +
+      '<div class="glass row-between" id="short-toggle" style="padding:14px 16px;margin-bottom:16px;cursor:pointer;">' +
+        '<div><div style="font-weight:600;font-size:14px;">Pubblica come Short</div>' +
+        '<div style="font-size:12px;color:var(--text-muted);margin-top:2px;">Video verticale, appare nella fila Shorts in Home</div></div>' +
+        '<div id="short-toggle-switch" style="width:44px;height:26px;border-radius:13px;background:var(--glass-strong);border:1px solid var(--border);position:relative;flex-shrink:0;">' +
+          '<div id="short-toggle-knob" style="width:20px;height:20px;border-radius:50%;background:var(--text-faint);position:absolute;top:2px;left:2px;transition:transform .15s, background .15s;"></div>' +
+        '</div>' +
+      '</div>' +
       '<button class="btn btn-primary" id="publish-btn">Pubblica</button>';
+
+    el("short-toggle").addEventListener("click", function(){
+      uploadState.isShort = !uploadState.isShort;
+      var knob = el("short-toggle-knob");
+      knob.style.transform = uploadState.isShort ? "translateX(18px)" : "translateX(0)";
+      knob.style.background = uploadState.isShort ? "var(--ember)" : "var(--text-faint)";
+    });
 
     var chBox = el("channel-select");
     chBox.innerHTML = state.myChannels.map(function(c, i){
@@ -1023,7 +1190,8 @@
         description: description,
         video_url: videoUrl,
         thumbnail_url: thumbUrl,
-        duration_seconds: Math.round(duration || 0)
+        duration_seconds: Math.round(duration || 0),
+        is_short: !!uploadState.isShort
       }).select().single().then(function(res){
         if(res.error){
           container.innerHTML = emptyState("Errore: " + res.error.message);
