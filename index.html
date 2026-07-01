@@ -542,6 +542,10 @@
       .order("created_at", { ascending: false })
       .limit(30)
       .then(function(res){
+        if(res.error){
+          feedList.innerHTML = emptyState("Errore caricamento: " + res.error.message);
+          return;
+        }
         if(!res.data || res.data.length === 0){
           feedList.innerHTML = emptyState("Nessun video ancora. Sii il primo a pubblicare!", iconCamera());
           return;
@@ -875,7 +879,20 @@
       '<div class="section-title">Nuova password</div>' +
       '<div class="field"><input type="password" id="settings-password" placeholder="Almeno 6 caratteri"></div>' +
       '<button class="btn btn-ghost btn-sm" id="save-password">Aggiorna password</button>' +
-      '<p id="password-msg" style="font-size:12.5px;margin-top:8px;"></p>';
+      '<p id="password-msg" style="font-size:12.5px;margin-top:8px;"></p>' +
+
+      '<div class="section-title">Utilizzo</div>' +
+      '<div class="glass" style="padding:16px;margin-bottom:14px;">' +
+        '<div class="row-between" style="margin-bottom:14px;">' +
+          '<div><div style="font-weight:600;font-size:14px;">Limite giornaliero</div>' +
+          '<div style="font-size:12px;color:var(--text-muted);margin-top:2px;">Blocca l\u2019app dopo un tot di minuti al giorno</div></div>' +
+          '<div id="usage-toggle-switch" style="width:44px;height:26px;border-radius:13px;background:var(--glass-strong);border:1px solid var(--border);position:relative;flex-shrink:0;cursor:pointer;">' +
+            '<div id="usage-toggle-knob" style="width:20px;height:20px;border-radius:50%;position:absolute;top:2px;left:2px;transition:transform .15s, background .15s;"></div>' +
+          '</div>' +
+        '</div>' +
+        '<div id="usage-limit-options" class="channel-select" style="margin-bottom:4px;"></div>' +
+        '<p style="font-size:12.5px;color:var(--text-muted);margin-top:10px;">Tempo di utilizzo oggi: <span id="usage-today-label" class="mono">0 min</span></p>' +
+      '</div>';
 
     el("save-username").addEventListener("click", function(){
       var newUsername = el("settings-username").value.trim();
@@ -911,6 +928,110 @@
         m.style.color = "var(--ember)";
       });
     });
+
+    renderUsageSettings();
+  }
+
+  /* ---------------- Usage limit / screen time ---------------- */
+  var USAGE_OPTIONS = [15, 30, 60, 90, 120];
+
+  function todayKey(){
+    var d = new Date();
+    return d.getFullYear() + "-" + (d.getMonth()+1) + "-" + d.getDate();
+  }
+  function getUsageSeconds(){
+    return parseInt(localStorage.getItem("meta_usage_" + todayKey()) || "0", 10);
+  }
+  function setUsageSeconds(sec){
+    localStorage.setItem("meta_usage_" + todayKey(), String(sec));
+  }
+  function getDailyLimitMinutes(){
+    var v = localStorage.getItem("meta_daily_limit_minutes");
+    return v ? parseInt(v, 10) : null;
+  }
+  function setDailyLimitMinutes(min){
+    if(min === null){ localStorage.removeItem("meta_daily_limit_minutes"); }
+    else { localStorage.setItem("meta_daily_limit_minutes", String(min)); }
+  }
+  function isUnlockedToday(){
+    return localStorage.getItem("meta_unlocked_" + todayKey()) === "true";
+  }
+  function unlockForToday(){
+    localStorage.setItem("meta_unlocked_" + todayKey(), "true");
+  }
+
+  function renderUsageSettings(){
+    var limit = getDailyLimitMinutes();
+    var enabled = limit !== null;
+    var knob = el("usage-toggle-knob");
+    knob.style.transform = enabled ? "translateX(18px)" : "translateX(0)";
+    knob.style.background = enabled ? "var(--ember)" : "var(--text-faint)";
+
+    var optsBox = el("usage-limit-options");
+    optsBox.style.display = enabled ? "flex" : "none";
+    optsBox.innerHTML = USAGE_OPTIONS.map(function(m){
+      return '<div class="channel-chip ' + (limit === m ? "selected" : "") + '" data-min="' + m + '">' + m + ' min</div>';
+    }).join("");
+    optsBox.querySelectorAll(".channel-chip").forEach(function(chip){
+      chip.addEventListener("click", function(){
+        var m = parseInt(chip.getAttribute("data-min"), 10);
+        setDailyLimitMinutes(m);
+        optsBox.querySelectorAll(".channel-chip").forEach(function(x){ x.classList.remove("selected"); });
+        chip.classList.add("selected");
+        checkUsageLock();
+      });
+    });
+
+    el("usage-today-label").textContent = Math.floor(getUsageSeconds() / 60) + " min";
+
+    el("usage-toggle-switch").onclick = function(){
+      var nowEnabled = getDailyLimitMinutes() !== null;
+      if(nowEnabled){
+        setDailyLimitMinutes(null);
+      } else {
+        setDailyLimitMinutes(USAGE_OPTIONS[1]);
+      }
+      renderUsageSettings();
+    };
+  }
+
+  function checkUsageLock(){
+    var limit = getDailyLimitMinutes();
+    if(limit === null) return;
+    if(isUnlockedToday()) return;
+    var seconds = getUsageSeconds();
+    if(seconds >= limit * 60){
+      showUsageLockScreen();
+    }
+  }
+
+  function showUsageLockScreen(){
+    if(el("usage-lock-overlay")) return;
+    var overlay = document.createElement("div");
+    overlay.id = "usage-lock-overlay";
+    overlay.style.cssText = "position:fixed;inset:0;background:#060a12;z-index:300;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px;text-align:center;";
+    overlay.innerHTML =
+      '<svg viewBox="0 0 24 24" fill="none" style="width:46px;height:46px;color:var(--ember);margin-bottom:20px;"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8"/><path d="M12 7v5l3.5 2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>' +
+      '<div class="display" style="font-size:20px;font-weight:700;margin-bottom:8px;">Tempo scaduto per oggi</div>' +
+      '<p style="color:var(--text-muted);font-size:14px;max-width:280px;margin-bottom:26px;">Hai raggiunto il limite di utilizzo giornaliero che hai impostato.</p>' +
+      '<button class="btn btn-primary" id="usage-continue-btn" style="max-width:260px;">Continua a usare</button>';
+    document.body.appendChild(overlay);
+    el("usage-continue-btn").addEventListener("click", function(){
+      unlockForToday();
+      overlay.remove();
+    });
+  }
+
+  function startUsageTracking(){
+    setInterval(function(){
+      if(document.visibilityState !== "visible") return;
+      if(el("usage-lock-overlay")) return;
+      var seconds = getUsageSeconds() + 1;
+      setUsageSeconds(seconds);
+      var label = el("usage-today-label");
+      if(label) label.textContent = Math.floor(seconds / 60) + " min";
+      checkUsageLock();
+    }, 1000);
   }
 
   function openCreateChannelFlow(){
@@ -1294,6 +1415,8 @@
     } else {
       el("auth-screen").classList.remove("hidden");
     }
+    startUsageTracking();
+    checkUsageLock();
   });
 
   sb.auth.onAuthStateChange(function(event, session){
