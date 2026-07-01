@@ -272,6 +272,7 @@
   <div id="view-search" class="screen hidden"></div>
   <div id="view-upload" class="screen hidden"></div>
   <div id="view-subs" class="screen hidden"></div>
+  <div id="view-shorts" class="screen hidden"></div>
   <div id="view-profile" class="screen hidden"></div>
   <div id="view-settings" class="screen hidden"></div>
   <div id="view-channel" class="screen hidden"></div>
@@ -289,9 +290,9 @@
     <button class="fab" id="nav-upload">
       <svg viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
     </button>
-    <button class="navbtn" data-nav="subs">
-      <svg viewBox="0 0 24 24" fill="none"><path d="M4 6h16M4 12h16M4 18h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-      <span>Iscrizioni</span>
+    <button class="navbtn" data-nav="shorts">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M8 5v14l11-7Z" fill="currentColor"/></svg>
+      <span>Shorts</span>
     </button>
     <button class="navbtn" data-nav="profile">
       <svg viewBox="0 0 24 24" fill="none"><path d="M12 12c2.5 0 4.5-2 4.5-4.5S14.5 3 12 3 7.5 5 7.5 7.5 9.5 12 12 12Zm0 2c-3.3 0-9 1.7-9 5v2h18v-2c0-3.3-5.7-5-9-5Z" fill="currentColor"/></svg>
@@ -356,7 +357,7 @@
   }
 
   /* ---------------- Navigation ---------------- */
-  var VIEWS = ["home","search","upload","subs","profile","settings","channel","video"];
+  var VIEWS = ["home","search","upload","subs","shorts","profile","settings","channel","video"];
   function showView(name, pushHistory){
     if(pushHistory !== false && state.currentView !== name){
       state.history.push(state.currentView);
@@ -377,10 +378,11 @@
     var prev = state.history.pop();
     showView(prev || "home", false);
     if(prev === "home") renderHome();
+    if(prev === "profile") renderProfile();
   }
   function updateTopbar(name){
     var left = el("topbar-left");
-    if(name === "video" || name === "channel" || name === "settings"){
+    if(name === "video" || name === "channel" || name === "settings" || name === "subs"){
       left.innerHTML = '<button class="icon-btn" id="btn-back"><svg viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>';
       el("btn-back").addEventListener("click", goBack);
     } else {
@@ -396,6 +398,7 @@
       if(target === "home") renderHome();
       if(target === "search") renderSearch();
       if(target === "subs") renderSubs();
+      if(target === "shorts") renderShortsTab();
       if(target === "profile") renderProfile();
     });
   });
@@ -661,6 +664,26 @@
     viewer.innerHTML = "";
   }
 
+  function renderShortsTab(){
+    var container = el("view-shorts");
+    container.innerHTML = '<h1 class="page-title">Shorts</h1><div class="progress-ring-wrap"><div class="spinner"></div></div>';
+    sb.from("videos")
+      .select("*, channels(name, handle, avatar_color, owner_id)")
+      .eq("is_short", true)
+      .order("created_at", { ascending: false })
+      .limit(50)
+      .then(function(res){
+        var shorts = res.data || [];
+        state.shortsList = shorts;
+        if(shorts.length === 0){
+          container.innerHTML = '<h1 class="page-title">Shorts</h1>' +
+            emptyState("Nessuno Short pubblicato ancora.");
+          return;
+        }
+        openShortsViewer(0);
+      });
+  }
+
   function renderVideoCard(v){
     var ch = v.channels || {};
     var color = ch.avatar_color || "#7c5cff";
@@ -789,6 +812,11 @@
         '<div style="font-size:12.5px;color:var(--text-muted);">' + esc(state.session.user.email) + '</div></div>' +
         '<svg viewBox="0 0 24 24" fill="none" style="width:18px;height:18px;color:var(--text-faint);flex-shrink:0;"><path d="m9 18 6-6-6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>' +
       '</div>' +
+      '<div class="glass list-channel" id="subs-link" style="margin:14px 0 22px;cursor:pointer;">' +
+        '<div class="avatar" style="width:44px;height:44px;background:var(--glass-strong);color:var(--text);"><svg viewBox="0 0 24 24" fill="none" style="width:20px;height:20px;"><path d="M4 6h16M4 12h16M4 18h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></div>' +
+        '<div style="flex:1;"><div class="list-channel-name">Iscrizioni</div><div class="list-channel-handle">Canali che segui</div></div>' +
+        '<svg viewBox="0 0 24 24" fill="none" style="width:18px;height:18px;color:var(--text-faint);"><path d="m9 18 6-6-6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>' +
+      '</div>' +
       '<div class="section-title">I tuoi canali</div>' +
       '<div id="my-channels-list"></div>' +
       '<button class="btn btn-ghost" id="create-channel-btn" style="margin-top:6px;">+ Crea nuovo canale</button>' +
@@ -797,6 +825,11 @@
     el("account-row").addEventListener("click", function(){
       showView("settings");
       renderAccountSettings();
+    });
+    el("subs-link").addEventListener("click", function(){
+      state.history = ["profile"];
+      showView("subs", false);
+      renderSubs();
     });
 
     var listBox = el("my-channels-list");
