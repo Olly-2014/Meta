@@ -146,6 +146,8 @@
 
   /* ---------- Video page ---------- */
   .player-wrap{width:100%;border-radius:0;background:#000;position:sticky;top:0;z-index:5;}
+  .media-text-overlay{position:absolute;transform:translate(-50%,-50%);font-weight:700;text-shadow:0 2px 8px rgba(0,0,0,0.55);
+    pointer-events:none;font-size:clamp(13px,4vw,26px);max-width:90%;text-align:center;line-height:1.2;}
   .player-wrap video{width:100%;display:block;max-height:56vh;background:#000;}
   .vp-title{font-family:'Space Grotesk';font-size:19px;font-weight:700;margin:16px 0 6px;line-height:1.3;}
   .vp-sub{color:var(--text-muted);font-size:13px;font-family:'IBM Plex Mono';}
@@ -227,6 +229,27 @@
   .shorts-progress{position:absolute;top:var(--safe-top);left:0;right:0;display:flex;gap:4px;padding:10px 12px;z-index:5;}
   .shorts-progress .seg{flex:1;height:2.5px;border-radius:2px;background:rgba(255,255,255,0.3);overflow:hidden;}
   .shorts-progress .seg.done{background:rgba(255,255,255,0.9);}
+
+  /* ---------- Media Editor ---------- */
+  #editor-screen{position:fixed;inset:0;background:#000;z-index:250;display:none;flex-direction:column;}
+  #editor-screen.active{display:flex;}
+  .editor-topbar{display:flex;align-items:center;justify-content:space-between;padding:calc(var(--safe-top) + 12px) 16px 12px;z-index:5;}
+  .editor-topbar button{background:rgba(255,255,255,0.12);border:none;border-radius:12px;padding:9px 16px;color:#fff;font-weight:600;font-size:13.5px;}
+  .editor-preview-wrap{flex:1;position:relative;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#000;}
+  .editor-preview-wrap img,.editor-preview-wrap video{max-width:100%;max-height:100%;display:block;}
+  .editor-textbox{position:absolute;transform:translate(-50%,-50%);padding:4px 10px;font-weight:700;font-size:22px;
+    text-shadow:0 2px 8px rgba(0,0,0,0.5);cursor:move;white-space:nowrap;touch-action:none;outline:none;border:1.5px dashed transparent;}
+  .editor-textbox.editing{border-color:rgba(255,255,255,0.6);}
+  .editor-textbox .del-x{position:absolute;top:-14px;right:-14px;width:22px;height:22px;border-radius:50%;background:var(--danger);
+    color:#fff;font-size:13px;display:flex;align-items:center;justify-content:center;border:2px solid #000;}
+  .editor-filter-rail{display:flex;gap:12px;overflow-x:auto;padding:14px 16px;background:rgba(0,0,0,0.6);}
+  .editor-filter-chip{flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:6px;}
+  .editor-filter-swatch{width:52px;height:52px;border-radius:14px;background-size:cover;background-position:center;border:2px solid transparent;}
+  .editor-filter-chip.selected .editor-filter-swatch{border-color:var(--ember);}
+  .editor-filter-chip span{font-size:10.5px;color:#ddd;font-weight:600;}
+  .editor-color-row{display:flex;gap:10px;padding:0 16px 14px;background:rgba(0,0,0,0.6);}
+  .editor-color-swatch{width:26px;height:26px;border-radius:50%;border:2px solid rgba(255,255,255,0.25);}
+  .editor-color-swatch.selected{border-color:#fff;}
   .list-channel-name{font-weight:600;font-size:14.5px;}
   .list-channel-handle{font-size:12px;color:var(--text-muted);}
 </style>
@@ -302,6 +325,7 @@
 </div>
 
 <div id="shorts-viewer"></div>
+<div id="editor-screen"></div>
 
 <script>
 (function(){
@@ -625,13 +649,20 @@
   }
 
   function renderShortSlide(index){
+    if(state.shortPhotoTimer){ clearTimeout(state.shortPhotoTimer); state.shortPhotoTimer = null; }
     var s = state.shortsList[index];
     var ch = s.channels || {};
+    var isPhoto = s.media_type === "photo";
     var isSubscribed = state.mySubscriptions.indexOf(ch.id) !== -1;
     var container = el("shorts-slide-container");
+    var filterCss = filterCssById(s.filter_name);
+    var mediaTag = isPhoto
+      ? '<img id="short-video" src="' + esc(s.video_url) + '" style="width:100%;height:100%;object-fit:contain;background:#000;filter:' + filterCss + ';">'
+      : '<video id="short-video" src="' + esc(s.video_url) + '" poster="' + esc(s.thumbnail_url || "") + '" playsinline autoplay loop muted style="filter:' + filterCss + ';"></video>';
     container.innerHTML =
       '<div class="shorts-slide">' +
-        '<video id="short-video" src="' + esc(s.video_url) + '" poster="' + esc(s.thumbnail_url || "") + '" playsinline autoplay loop muted></video>' +
+        mediaTag +
+        renderOverlaysHtml(s.text_overlays) +
         '<div class="shorts-tap-zone" id="shorts-tap"></div>' +
         '<div class="shorts-info">' +
           '<div class="sh-channel"><div class="avatar" style="width:30px;height:30px;font-size:12px;background:' + ch.avatar_color + '">' + initials(ch.name) + '</div>' + esc(ch.name) + '</div>' +
@@ -642,6 +673,12 @@
           (isSubscribed ? '' : '<button id="short-sub-btn"><svg viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg><span>Iscriviti</span></button>') +
         '</div>' +
       '</div>';
+
+    if(isPhoto){
+      state.shortPhotoTimer = setTimeout(function(){
+        goToShort(state.currentShortIndex + 1);
+      }, 5000);
+    }
 
     var videoEl = el("short-video");
     var tapZone = el("shorts-tap");
@@ -730,9 +767,10 @@
   }
 
   function closeShortsViewer(){
+    if(state.shortPhotoTimer){ clearTimeout(state.shortPhotoTimer); state.shortPhotoTimer = null; }
     var viewer = el("shorts-viewer");
     var video = el("short-video");
-    if(video){ video.pause(); }
+    if(video && video.tagName === "VIDEO"){ video.pause(); }
     viewer.classList.remove("active");
     viewer.innerHTML = "";
     if(state.currentView === "shorts"){
@@ -766,13 +804,17 @@
   function renderVideoCard(v){
     var ch = v.channels || {};
     var color = ch.avatar_color || "#7c5cff";
+    var isPhoto = v.media_type === "photo";
+    var filterCss = filterCssById(v.filter_name);
     var thumbHtml = v.thumbnail_url
-      ? '<img src="' + esc(v.thumbnail_url) + '" loading="lazy">'
+      ? '<img src="' + esc(v.thumbnail_url) + '" loading="lazy" style="filter:' + filterCss + ';">'
       : '<div class="thumb-placeholder">' + iconCamera() + '</div>';
+    var badge = isPhoto
+      ? '<span class="duration-badge"><svg viewBox="0 0 24 24" fill="none" style="width:11px;height:11px;vertical-align:-1px;"><path d="M4 8a2 2 0 0 1 2-2h2l1.5-2h5L16 6h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8Z" stroke="white" stroke-width="1.6"/></svg></span>'
+      : (v.duration_seconds ? '<span class="duration-badge">' + fmtDuration(v.duration_seconds) + '</span>' : '');
     return '' +
     '<div class="video-card" data-video-id="' + v.id + '">' +
-      '<div class="thumb-wrap">' + thumbHtml +
-        (v.duration_seconds ? '<span class="duration-badge">' + fmtDuration(v.duration_seconds) + '</span>' : '') +
+      '<div class="thumb-wrap">' + thumbHtml + badge + renderOverlaysHtml(v.text_overlays) +
       '</div>' +
       '<div class="vc-meta">' +
         '<div class="avatar" style="background:' + color + '">' + initials(ch.name) + '</div>' +
@@ -1257,9 +1299,13 @@
 
       var isSubscribed = state.mySubscriptions.indexOf(ch.id) !== -1;
       var isOwnChannel = state.session && ch.owner_id === state.session.user.id;
+      var filterCss = filterCssById(v.filter_name);
+      var mediaHtml = v.media_type === "photo"
+        ? '<div class="player-wrap" style="position:relative;"><img src="' + esc(v.video_url) + '" style="width:100%;display:block;max-height:70vh;object-fit:contain;background:#000;filter:' + filterCss + ';">' + renderOverlaysHtml(v.text_overlays) + '</div>'
+        : '<div class="player-wrap" style="position:relative;"><video controls playsinline poster="' + esc(v.thumbnail_url || "") + '" src="' + esc(v.video_url) + '" style="filter:' + filterCss + ';"></video>' + renderOverlaysHtml(v.text_overlays) + '</div>';
 
       container.innerHTML =
-        '<div class="player-wrap"><video controls playsinline poster="' + esc(v.thumbnail_url || "") + '" src="' + esc(v.video_url) + '"></video></div>' +
+        mediaHtml +
         '<div style="padding:16px;">' +
         '<div class="vp-title">' + esc(v.title) + '</div>' +
         '<div class="vp-sub">' + fmtViews((v.views||0)+1) + ' &middot; ' + timeAgo(v.created_at) + '</div>' +
@@ -1377,22 +1423,49 @@
       });
       return;
     }
-    uploadState = { file:null, channelId: state.myChannels[0].id, isShort: false };
+    uploadState = { file:null, channelId: state.myChannels[0].id, isShort: false, mediaType: "video" };
     container.innerHTML =
-      '<h1 class="page-title">Carica video</h1>' +
+      '<h1 class="page-title">Carica contenuto</h1>' +
+      '<div class="auth-toggle" id="media-type-toggle" style="margin-bottom:18px;">' +
+        '<button class="active" data-type="video">Video</button>' +
+        '<button data-type="photo">Foto</button>' +
+      '</div>' +
       '<div class="channel-select" id="channel-select"></div>' +
       '<div class="upload-drop" id="drop-zone">' + iconUpload() + '<p>Tocca per scegliere un video</p></div>' +
       '<input type="file" id="file-input" accept="video/*" style="display:none;">' +
-      '<div class="field"><label>Titolo</label><input type="text" id="video-title" placeholder="Dai un titolo al tuo video"></div>' +
-      '<div class="field"><label>Descrizione (opzionale)</label><textarea id="video-desc" placeholder="Racconta di cosa parla il video..."></textarea></div>' +
+      '<div class="field"><label>Titolo</label><input type="text" id="video-title" placeholder="Dai un titolo al tuo contenuto"></div>' +
+      '<div class="field"><label>Descrizione (opzionale)</label><textarea id="video-desc" placeholder="Racconta di cosa parla..."></textarea></div>' +
       '<div class="glass row-between" id="short-toggle" style="padding:14px 16px;margin-bottom:16px;cursor:pointer;">' +
-        '<div><div style="font-weight:600;font-size:14px;">Pubblica come Short</div>' +
-        '<div style="font-size:12px;color:var(--text-muted);margin-top:2px;">Video verticale, appare nella fila Shorts in Home</div></div>' +
+        '<div><div style="font-weight:600;font-size:14px;" id="short-toggle-label">Pubblica come Short</div>' +
+        '<div style="font-size:12px;color:var(--text-muted);margin-top:2px;" id="short-toggle-sub">Video verticale, appare nella fila Shorts in Home</div></div>' +
         '<div id="short-toggle-switch" style="width:44px;height:26px;border-radius:13px;background:var(--glass-strong);border:1px solid var(--border);position:relative;flex-shrink:0;">' +
           '<div id="short-toggle-knob" style="width:20px;height:20px;border-radius:50%;background:var(--text-faint);position:absolute;top:2px;left:2px;transition:transform .15s, background .15s;"></div>' +
         '</div>' +
       '</div>' +
       '<button class="btn btn-primary" id="publish-btn">Pubblica</button>';
+
+    var fileInput = el("file-input");
+    var dropZone = el("drop-zone");
+    el("media-type-toggle").querySelectorAll("button").forEach(function(btn){
+      btn.addEventListener("click", function(){
+        el("media-type-toggle").querySelectorAll("button").forEach(function(b){ b.classList.remove("active"); });
+        btn.classList.add("active");
+        uploadState.mediaType = btn.getAttribute("data-type");
+        uploadState.file = null;
+        dropZone.classList.remove("has-file");
+        if(uploadState.mediaType === "photo"){
+          fileInput.setAttribute("accept", "image/*");
+          dropZone.innerHTML = iconUpload() + '<p>Tocca per scegliere una foto</p>';
+          el("short-toggle-label").textContent = "Pubblica come Short";
+          el("short-toggle-sub").textContent = "Foto verticale, appare nella fila Shorts in Home";
+        } else {
+          fileInput.setAttribute("accept", "video/*");
+          dropZone.innerHTML = iconUpload() + '<p>Tocca per scegliere un video</p>';
+          el("short-toggle-label").textContent = "Pubblica come Short";
+          el("short-toggle-sub").textContent = "Video verticale, appare nella fila Shorts in Home";
+        }
+      });
+    });
 
     el("short-toggle").addEventListener("click", function(){
       uploadState.isShort = !uploadState.isShort;
@@ -1421,8 +1494,14 @@
       var f = fileInput.files[0];
       if(!f) return;
       uploadState.file = f;
+      uploadState.filterName = uploadState.filterName || "none";
+      uploadState.textOverlays = uploadState.textOverlays || [];
       dropZone.classList.add("has-file");
-      dropZone.innerHTML = iconUpload() + '<p>' + esc(f.name) + '</p>';
+      dropZone.innerHTML = iconUpload() + '<p>' + esc(f.name) + ' &middot; <span style="color:var(--ember);">modifica</span></p>';
+      openMediaEditor(f, uploadState.mediaType);
+    });
+    dropZone.addEventListener("dblclick", function(){
+      if(uploadState.file) openMediaEditor(uploadState.file, uploadState.mediaType);
     });
 
     el("publish-btn").addEventListener("click", function(){ doPublish(container); });
@@ -1431,9 +1510,174 @@
     return '<svg viewBox="0 0 24 24" fill="none"><path d="M12 16V4m0 0-4 4m4-4 4 4M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>';
   }
 
+  /* ---------------- Media Editor (filters + text) ---------------- */
+  var FILTERS = [
+    { id: "none", label: "Normale", css: "" },
+    { id: "bn", label: "B&N", css: "grayscale(1)" },
+    { id: "vivido", label: "Vivido", css: "saturate(1.6) contrast(1.12)" },
+    { id: "vintage", label: "Vintage", css: "sepia(0.35) contrast(0.9) brightness(1.05) saturate(0.85)" },
+    { id: "freddo", label: "Freddo", css: "hue-rotate(-8deg) saturate(1.1) brightness(1.03) contrast(1.05)" },
+    { id: "caldo", label: "Caldo", css: "sepia(0.22) saturate(1.3) hue-rotate(-6deg)" },
+    { id: "seppia", label: "Seppia", css: "sepia(0.8)" },
+    { id: "contrasto", label: "Contrasto", css: "contrast(1.4) saturate(1.2)" }
+  ];
+  var TEXT_COLORS = ["#ffffff", "#3d8bff", "#ff5a36", "#ffd23d", "#2ecc71", "#000000"];
+
+  function filterCssById(id){
+    for(var i=0;i<FILTERS.length;i++){ if(FILTERS[i].id === id) return FILTERS[i].css; }
+    return "";
+  }
+  function renderOverlaysHtml(overlays){
+    if(!overlays || !overlays.length) return "";
+    return overlays.map(function(o){
+      return '<div class="media-text-overlay" style="left:' + o.x + '%;top:' + o.y + '%;color:' + esc(o.color) + ';">' + esc(o.text) + '</div>';
+    }).join("");
+  }
+
+  function openMediaEditor(file, mediaType){
+    var screen = el("editor-screen");
+    var url = URL.createObjectURL(file);
+    var mediaEl = mediaType === "photo"
+      ? '<img id="editor-media" src="' + url + '">'
+      : '<video id="editor-media" src="' + url + '" playsinline autoplay loop muted></video>';
+
+    screen.innerHTML =
+      '<div class="editor-topbar"><button id="editor-cancel">Annulla</button><button id="editor-done">Fatto</button></div>' +
+      '<div class="editor-preview-wrap" id="editor-preview">' + mediaEl +
+        '<div id="editor-text-layer" style="position:absolute;inset:0;"></div>' +
+      '</div>' +
+      '<div class="editor-color-row" id="editor-color-row" style="display:none;"></div>' +
+      '<div class="editor-topbar" style="padding-top:0;padding-bottom:0;">' +
+        '<button id="editor-add-text">+ Testo</button><div></div>' +
+      '</div>' +
+      '<div class="editor-filter-rail" id="editor-filter-rail"></div>';
+
+    screen.classList.add("active");
+
+    var mediaNode = el("editor-media");
+    var currentFilter = uploadState.filterName || "none";
+    mediaNode.style.filter = filterCssById(currentFilter);
+
+    var filterRail = el("editor-filter-rail");
+    filterRail.innerHTML = FILTERS.map(function(f){
+      return '<div class="editor-filter-chip ' + (f.id === currentFilter ? "selected" : "") + '" data-filter="' + f.id + '">' +
+        '<div class="editor-filter-swatch" style="filter:' + f.css + ';background-image:url(' + url + ');"></div>' +
+        '<span>' + f.label + '</span></div>';
+    }).join("");
+    filterRail.querySelectorAll(".editor-filter-chip").forEach(function(chip){
+      chip.addEventListener("click", function(){
+        filterRail.querySelectorAll(".editor-filter-chip").forEach(function(c){ c.classList.remove("selected"); });
+        chip.classList.add("selected");
+        currentFilter = chip.getAttribute("data-filter");
+        mediaNode.style.filter = filterCssById(currentFilter);
+      });
+    });
+
+    var textLayer = el("editor-text-layer");
+    var localOverlays = (uploadState.textOverlays || []).slice();
+    var activeBox = null;
+
+    function drawOverlay(ov){
+      var box = document.createElement("div");
+      box.className = "editor-textbox";
+      box.textContent = ov.text;
+      box.style.left = ov.x + "%";
+      box.style.top = ov.y + "%";
+      box.style.color = ov.color;
+      box.contentEditable = "true";
+      box.dataset.id = ov.id;
+      textLayer.appendChild(box);
+
+      box.addEventListener("input", function(){ ov.text = box.textContent; });
+      box.addEventListener("focus", function(){ setActiveBox(box, ov); });
+
+      var dragging = false, offX = 0, offY = 0;
+      function startDrag(clientX, clientY){
+        dragging = true;
+        setActiveBox(box, ov);
+        var rect = box.getBoundingClientRect();
+        offX = clientX - (rect.left + rect.width/2);
+        offY = clientY - (rect.top + rect.height/2);
+      }
+      function moveDrag(clientX, clientY){
+        if(!dragging) return;
+        var wrapRect = textLayer.getBoundingClientRect();
+        var x = ((clientX - offX - wrapRect.left) / wrapRect.width) * 100;
+        var y = ((clientY - offY - wrapRect.top) / wrapRect.height) * 100;
+        x = Math.max(4, Math.min(96, x));
+        y = Math.max(4, Math.min(96, y));
+        box.style.left = x + "%";
+        box.style.top = y + "%";
+        ov.x = x; ov.y = y;
+      }
+      function endDrag(){ dragging = false; }
+
+      box.addEventListener("touchstart", function(e){ startDrag(e.touches[0].clientX, e.touches[0].clientY); }, {passive:true});
+      box.addEventListener("touchmove", function(e){ moveDrag(e.touches[0].clientX, e.touches[0].clientY); }, {passive:true});
+      box.addEventListener("touchend", endDrag);
+      box.addEventListener("mousedown", function(e){ startDrag(e.clientX, e.clientY); });
+      window.addEventListener("mousemove", function(e){ moveDrag(e.clientX, e.clientY); });
+      window.addEventListener("mouseup", endDrag);
+
+      return box;
+    }
+
+    function setActiveBox(box, ov){
+      textLayer.querySelectorAll(".editor-textbox").forEach(function(b){ b.classList.remove("editing"); });
+      box.classList.add("editing");
+      activeBox = { box: box, ov: ov };
+      var colorRow = el("editor-color-row");
+      colorRow.style.display = "flex";
+      colorRow.innerHTML = TEXT_COLORS.map(function(c){
+        return '<div class="editor-color-swatch ' + (ov.color === c ? "selected" : "") + '" style="background:' + c + ';" data-color="' + c + '"></div>';
+      }).join("") + '<div class="editor-color-swatch" style="background:transparent;border-color:var(--danger);display:flex;align-items:center;justify-content:center;color:var(--danger);font-size:14px;" id="editor-del-text">&times;</div>';
+      colorRow.querySelectorAll("[data-color]").forEach(function(sw){
+        sw.addEventListener("click", function(){
+          var c = sw.getAttribute("data-color");
+          ov.color = c;
+          box.style.color = c;
+          colorRow.querySelectorAll(".editor-color-swatch").forEach(function(s){ s.classList.remove("selected"); });
+          sw.classList.add("selected");
+        });
+      });
+      el("editor-del-text").addEventListener("click", function(){
+        box.remove();
+        localOverlays = localOverlays.filter(function(o){ return o.id !== ov.id; });
+        colorRow.style.display = "none";
+        activeBox = null;
+      });
+    }
+
+    localOverlays.forEach(drawOverlay);
+
+    el("editor-add-text").addEventListener("click", function(){
+      var ov = { id: "t" + Date.now(), text: "Testo", x: 50, y: 50, color: "#ffffff" };
+      localOverlays.push(ov);
+      var box = drawOverlay(ov);
+      setActiveBox(box, ov);
+      box.focus();
+      document.execCommand && document.execCommand("selectAll", false, null);
+    });
+
+    function cleanup(){
+      URL.revokeObjectURL(url);
+      screen.classList.remove("active");
+      screen.innerHTML = "";
+    }
+
+    el("editor-cancel").addEventListener("click", function(){
+      cleanup();
+    });
+    el("editor-done").addEventListener("click", function(){
+      uploadState.filterName = currentFilter;
+      uploadState.textOverlays = localOverlays.filter(function(o){ return o.text && o.text.trim(); });
+      cleanup();
+    });
+  }
+
   function doPublish(container){
     var title = el("video-title").value.trim();
-    if(!uploadState.file){ alert("Scegli un file video."); return; }
+    if(!uploadState.file){ alert(uploadState.mediaType === "photo" ? "Scegli una foto." : "Scegli un file video."); return; }
     if(!title){ alert("Inserisci un titolo."); return; }
     if(!uploadState.channelId){ alert("Seleziona un canale."); return; }
     var description = el("video-desc").value.trim();
@@ -1443,6 +1687,18 @@
     var file = uploadState.file;
     var ext = file.name.split(".").pop();
     var path = state.session.user.id + "/" + Date.now() + "." + ext;
+
+    if(uploadState.mediaType === "photo"){
+      sb.storage.from("videos").upload(path, file).then(function(uploadRes){
+        if(uploadRes.error){
+          container.innerHTML = emptyState("Errore durante il caricamento: " + uploadRes.error.message);
+          return;
+        }
+        var photoUrl = sb.storage.from("videos").getPublicUrl(path).data.publicUrl;
+        insertVideoRow(photoUrl, photoUrl, 0);
+      });
+      return;
+    }
 
     sb.storage.from("videos").upload(path, file).then(function(uploadRes){
       if(uploadRes.error){
@@ -1474,7 +1730,10 @@
         video_url: videoUrl,
         thumbnail_url: thumbUrl,
         duration_seconds: Math.round(duration || 0),
-        is_short: !!uploadState.isShort
+        is_short: !!uploadState.isShort,
+        media_type: uploadState.mediaType,
+        filter_name: uploadState.filterName || "none",
+        text_overlays: uploadState.textOverlays || []
       }).select().single().then(function(res){
         if(res.error){
           container.innerHTML = emptyState("Errore: " + res.error.message);
