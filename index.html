@@ -230,6 +230,18 @@
   .shorts-actions .liked svg{color:var(--ember);}
   .shorts-tap-zone{position:absolute;inset:0;z-index:2;}
   .shorts-progress{position:absolute;top:var(--safe-top);left:0;right:0;display:flex;gap:4px;padding:10px 12px;z-index:5;}
+
+  .shorts-comments-sheet{position:fixed;left:0;right:0;bottom:0;max-height:68vh;background:var(--bg-elevated);
+    border-radius:20px 20px 0 0;z-index:260;display:none;flex-direction:column;
+    padding-bottom:var(--safe-bottom);box-shadow:0 -10px 40px rgba(0,0,0,0.5);}
+  .shorts-comments-sheet.active{display:flex;}
+  .shorts-comments-header{display:flex;justify-content:space-between;align-items:center;padding:16px;border-bottom:1px solid var(--border);flex-shrink:0;}
+  .shorts-comments-header h3{font-family:'Space Grotesk';font-size:15px;font-weight:700;margin:0;}
+  .shorts-comments-header button{background:var(--glass);border:none;border-radius:50%;width:30px;height:30px;color:var(--text);display:flex;align-items:center;justify-content:center;}
+  .shorts-comments-header button svg{width:16px;height:16px;}
+  .shorts-comments-list{overflow-y:auto;padding:16px;flex:1;-webkit-overflow-scrolling:touch;}
+  .shorts-comments-backdrop{position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:255;display:none;}
+  .shorts-comments-backdrop.active{display:block;}
   .shorts-progress .seg{flex:1;height:2.5px;border-radius:2px;background:rgba(255,255,255,0.3);overflow:hidden;}
   .shorts-progress .seg.done{background:rgba(255,255,255,0.9);}
 
@@ -332,6 +344,8 @@
 
 <div id="shorts-viewer"></div>
 <div id="editor-screen"></div>
+<div id="shorts-comments-backdrop" class="shorts-comments-backdrop"></div>
+<div id="shorts-comments-sheet" class="shorts-comments-sheet"></div>
 
 <script>
 (function(){
@@ -675,10 +689,23 @@
           '<div class="sh-title">' + esc(s.title) + '</div>' +
         '</div>' +
         '<div class="shorts-actions">' +
+          '<button id="short-comment-btn"><svg viewBox="0 0 24 24" fill="none"><path d="M4 5h16v11H8l-4 4V5Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg><span id="short-comment-count">0</span></button>' +
+          '<button id="short-share-btn"><svg viewBox="0 0 24 24" fill="none"><path d="M4 12v6a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-6M16 6l-4-4-4 4M12 2v14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Condividi</span></button>' +
           '<button id="short-like-btn"><svg viewBox="0 0 24 24" fill="none"><path d="M12 21s-7-4.5-9.5-9C1 8 2.5 4.5 6 4.5c2 0 3.5 1.2 4.3 2.4C11.1 5.5 12.5 4.5 14.5 4.5 18 4.5 19.5 8 18.5 12c-2.5 4.5-6.5 9-6.5 9Z" stroke="currentColor" stroke-width="1.8"/></svg><span id="short-like-count">0</span></button>' +
           (isSubscribed ? '' : '<button id="short-sub-btn"><svg viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg><span>Iscriviti</span></button>') +
         '</div>' +
       '</div>';
+
+    sb.from("comments").select("id", {count:"exact", head:true}).eq("video_id", s.id).then(function(cres){
+      var el2 = el("short-comment-count");
+      if(el2) el2.textContent = cres.count || 0;
+    });
+    el("short-comment-btn").addEventListener("click", function(){
+      openShortsComments(s);
+    });
+    el("short-share-btn").addEventListener("click", function(){
+      shareShort(s);
+    });
 
     if(isPhoto){
       state.shortPhotoTimer = setTimeout(function(){
@@ -774,6 +801,7 @@
 
   function closeShortsViewer(){
     if(state.shortPhotoTimer){ clearTimeout(state.shortPhotoTimer); state.shortPhotoTimer = null; }
+    closeShortsComments();
     var viewer = el("shorts-viewer");
     var video = el("short-video");
     if(video && video.tagName === "VIDEO"){ video.pause(); }
@@ -783,6 +811,89 @@
       state.history = [];
       showView("home", false);
       renderHome();
+    }
+  }
+
+  function openShortsComments(video){
+    var sheet = el("shorts-comments-sheet");
+    var backdrop = el("shorts-comments-backdrop");
+    sheet.innerHTML =
+      '<div class="shorts-comments-header"><h3>Commenti</h3><button id="shorts-comments-close"><svg viewBox="0 0 24 24" fill="none"><path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button></div>' +
+      '<div class="shorts-comments-list" id="shorts-comments-list"></div>' +
+      (state.session ? '<div class="comment-form" style="margin:0 16px 16px;"><input type="text" id="shorts-comment-input" placeholder="Aggiungi un commento..."><button id="shorts-comment-submit">Invia</button></div>' : '');
+    sheet.classList.add("active");
+    backdrop.classList.add("active");
+
+    el("shorts-comments-close").addEventListener("click", closeShortsComments);
+    backdrop.addEventListener("click", closeShortsComments);
+
+    loadShortsComments(video.id);
+
+    if(state.session){
+      var input = el("shorts-comment-input");
+      el("shorts-comment-submit").addEventListener("click", function(){ submitShortsComment(video.id, input); });
+      input.addEventListener("keydown", function(e){ if(e.key === "Enter") submitShortsComment(video.id, input); });
+    }
+  }
+
+  function closeShortsComments(){
+    var sheet = el("shorts-comments-sheet");
+    var backdrop = el("shorts-comments-backdrop");
+    sheet.classList.remove("active");
+    backdrop.classList.remove("active");
+    sheet.innerHTML = "";
+  }
+
+  function loadShortsComments(videoId){
+    var box = el("shorts-comments-list");
+    if(!box) return;
+    sb.from("comments").select("*, profiles(username, avatar_color)").eq("video_id", videoId)
+      .order("created_at",{ascending:false}).then(function(res){
+        var comments = res.data || [];
+        if(!el("shorts-comments-list")) return;
+        if(comments.length === 0){
+          box.innerHTML = '<p style="font-size:13px;color:var(--text-faint);">Nessun commento ancora.</p>';
+          return;
+        }
+        box.innerHTML = comments.map(function(c){
+          var p = c.profiles || {};
+          return '<div class="comment">' +
+            '<div class="avatar" style="background:' + (p.avatar_color || "#7c5cff") + '">' + initials(p.username) + '</div>' +
+            '<div class="comment-body"><div class="comment-author">' + esc(p.username) + '<span class="comment-time">' + timeAgo(c.created_at) + '</span></div>' +
+            '<div class="comment-text">' + esc(c.content) + '</div></div>' +
+          '</div>';
+        }).join("");
+      });
+  }
+
+  function submitShortsComment(videoId, input){
+    var text = input.value.trim();
+    if(!text) return;
+    input.value = "";
+    sb.from("comments").insert({video_id: videoId, user_id: state.session.user.id, content: text}).then(function(res){
+      if(res.error){ alert("Errore: " + res.error.message); return; }
+      loadShortsComments(videoId);
+      var countEl = el("short-comment-count");
+      if(countEl) countEl.textContent = parseInt(countEl.textContent,10) + 1;
+    });
+  }
+
+  function shareShort(s){
+    var shareData = {
+      title: s.title,
+      text: s.title + " su Meta",
+      url: s.video_url
+    };
+    if(navigator.share){
+      navigator.share(shareData).catch(function(){});
+    } else if(navigator.clipboard){
+      navigator.clipboard.writeText(s.video_url).then(function(){
+        alert("Link copiato negli appunti.");
+      }).catch(function(){
+        prompt("Copia il link:", s.video_url);
+      });
+    } else {
+      prompt("Copia il link:", s.video_url);
     }
   }
 
