@@ -1073,7 +1073,7 @@
     });
   }
 
-  function deleteVideoFlow(videoId, cardEl){
+  function deleteVideoFlow(videoId, cardEl, onDone){
     var confirmed = confirm("Eliminare definitivamente questo video? L'azione non puo essere annullata.");
     if(!confirmed) return;
     sb.from("videos").select("video_url, thumbnail_url").eq("id", videoId).single().then(function(vres){
@@ -1089,6 +1089,7 @@
         sb.from("videos").delete().eq("id", videoId).then(function(res){
           if(res.error){ alert("Errore: " + res.error.message); return; }
           if(cardEl) cardEl.remove();
+          if(onDone) onDone();
         });
       });
     });
@@ -1631,12 +1632,24 @@
           '<div style="flex:1;" id="vp-channel-name"><div style="font-weight:600;font-size:14.5px;">' + esc(author.name) + '</div></div>' +
           (isOwnAuthor || author.kind !== "channel" ? '' : '<button class="btn ' + (isSubscribed ? "btn-ghost" : "btn-violet") + ' btn-sm" id="vp-sub-btn">' + (isSubscribed ? "Iscritto" : "Iscriviti") + '</button>') +
         '</div>' +
-        '<div class="vp-actions"><button class="like-btn" id="like-btn"><svg viewBox="0 0 24 24" fill="none"><path d="M12 21s-7-4.5-9.5-9C1 8 2.5 4.5 6 4.5c2 0 3.5 1.2 4.3 2.4C11.1 5.5 12.5 4.5 14.5 4.5 18 4.5 19.5 8 18.5 12c-2.5 4.5-6.5 9-6.5 9Z" stroke="currentColor" stroke-width="1.8"/></svg><span id="like-count">0</span></button></div>' +
+        '<div class="vp-actions"><button class="like-btn" id="like-btn"><svg viewBox="0 0 24 24" fill="none"><path d="M12 21s-7-4.5-9.5-9C1 8 2.5 4.5 6 4.5c2 0 3.5 1.2 4.3 2.4C11.1 5.5 12.5 4.5 14.5 4.5 18 4.5 19.5 8 18.5 12c-2.5 4.5-6.5 9-6.5 9Z" stroke="currentColor" stroke-width="1.8"/></svg><span id="like-count">0</span></button>' +
+          (isOwnAuthor ? '<button class="like-btn" id="vp-delete-btn" style="color:var(--danger);border-color:rgba(255,77,77,0.35);"><svg viewBox="0 0 24 24" fill="none"><path d="M4 7h16M9 7V4h6v3m-8 0 1 13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1l1-13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>Elimina</button>' : '') +
+        '</div>' +
         (v.description ? '<div class="vp-desc">' + esc(v.description) + '</div>' : '') +
         '<div class="section-title">Commenti</div>' +
         (state.session ? '<div class="comment-form"><input type="text" id="comment-input" placeholder="Aggiungi un commento..."><button id="comment-submit">Invia</button></div>' : '') +
         '<div id="comments-list"></div>' +
         '</div>';
+
+      var deleteBtn = el("vp-delete-btn");
+      if(deleteBtn){
+        deleteBtn.addEventListener("click", function(){
+          deleteVideoFlow(v.id, null, function(){
+            state.history = [];
+            openAuthor(author);
+          });
+        });
+      }
 
       if(v.media_group && v.media_group.length > 1){
         var track = el("carousel-track");
