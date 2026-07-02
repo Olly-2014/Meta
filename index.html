@@ -101,10 +101,11 @@
     background:linear-gradient(135deg,#1a1a28,#0e0e16);}
   .thumb-placeholder svg{width:34px;height:34px;color:var(--text-faint);}
   .duration-badge{position:absolute;bottom:8px;right:8px;background:rgba(0,0,0,0.75);color:#fff;font-size:11px;
-    padding:2px 6px;border-radius:6px;font-family:'IBM Plex Mono';}
+    padding:2px 6px;border-radius:6px;font-family:'IBM Plex Mono';z-index:2;}
   .vc-delete-btn{position:absolute;top:8px;right:8px;width:30px;height:30px;border-radius:50%;
-    background:rgba(0,0,0,0.6);border:1px solid rgba(255,255,255,0.15);display:flex;align-items:center;justify-content:center;}
+    background:rgba(0,0,0,0.6);border:1px solid rgba(255,255,255,0.15);display:flex;align-items:center;justify-content:center;z-index:2;}
   .vc-delete-btn svg{width:15px;height:15px;}
+  .feed-preview-video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:1;background:#000;}
   .vc-meta{display:flex;gap:10px;margin-top:10px;align-items:flex-start;}
   .avatar{width:36px;height:36px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;
     font-family:'Space Grotesk';font-weight:700;font-size:14px;color:#fff;}
@@ -162,7 +163,7 @@
   .carousel-dot{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,0.4);transition:width .15s,background .15s;}
   .carousel-dot.active{background:#fff;width:16px;border-radius:3px;}
   .gallery-badge{position:absolute;top:8px;left:8px;width:24px;height:24px;border-radius:6px;background:rgba(0,0,0,0.6);
-    display:flex;align-items:center;justify-content:center;}
+    display:flex;align-items:center;justify-content:center;z-index:2;}
   .gallery-badge svg{width:13px;height:13px;}
   .vp-title{font-family:'Space Grotesk';font-size:19px;font-weight:700;margin:16px 0 6px;line-height:1.3;}
   .vp-sub{color:var(--text-muted);font-size:13px;font-family:'IBM Plex Mono';}
@@ -553,6 +554,7 @@
           return;
         }
         if(res.data.session){
+          state.isNewSignup = true;
           onAuthReady(res.data.session);
         } else {
           errBox.textContent = "Controlla la tua email per confermare l'account.";
@@ -595,7 +597,30 @@
       subscribeToNotifications();
       showView(state.currentView || "home", false);
       renderHome();
+      if(state.isNewSignup){
+        state.isNewSignup = false;
+        showWelcomeOverlay();
+      }
     });
+  }
+
+  function showWelcomeOverlay(){
+    var overlay = document.createElement("div");
+    overlay.id = "welcome-overlay";
+    overlay.style.cssText = "position:fixed;inset:0;background:#060a12;z-index:400;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px;text-align:center;";
+    var uname = state.profile ? state.profile.username : "";
+    overlay.innerHTML =
+      '<div class="logo" style="font-size:28px;margin-bottom:14px;"><span class="rec-dot"></span>Meta</div>' +
+      '<div class="display" style="font-size:20px;font-weight:700;margin-bottom:10px;">Benvenuto' + (uname ? ", " + esc(uname) : "") + '!</div>' +
+      '<p style="color:var(--text-muted);font-size:14px;max-width:300px;line-height:1.5;margin-bottom:8px;">Ecco come iniziare:</p>' +
+      '<div style="text-align:left;max-width:300px;margin-bottom:28px;">' +
+        '<p style="font-size:13.5px;color:#ddd;margin-bottom:10px;">1. Tocca <b>+</b> per pubblicare un video o una foto</p>' +
+        '<p style="font-size:13.5px;color:#ddd;margin-bottom:10px;">2. Crea un canale dal tuo Profilo, oppure pubblica direttamente col tuo nome</p>' +
+        '<p style="font-size:13.5px;color:#ddd;">3. Esplora Home e Shorts, iscriviti ai canali che ti piacciono</p>' +
+      '</div>' +
+      '<button class="btn btn-primary" id="welcome-start-btn" style="max-width:260px;">Inizia</button>';
+    document.body.appendChild(overlay);
+    el("welcome-start-btn").addEventListener("click", function(){ overlay.remove(); });
   }
 
   function loadMyChannels(){
@@ -716,17 +741,20 @@
   /* ---------------- Home / Feed ---------------- */
   function renderHome(){
     var container = el("view-home");
-    container.innerHTML = '<h1 class="page-title">Home</h1><div id="shorts-section"></div><div id="trending-section"></div><div id="feed-list"></div>';
+    container.innerHTML = '<h1 class="page-title">Home</h1><div id="shorts-section"></div><div id="trending-section"></div><div id="feed-list"></div><div id="feed-more-spinner"></div>';
     loadShortsRail();
     loadTrendingRail();
     var feedList = el("feed-list");
     feedList.innerHTML = '<div class="progress-ring-wrap"><div class="spinner"></div></div>';
+    state.homeFeedOffset = 0;
+    state.homeFeedHasMore = true;
+    state.homeFeedLoadingMore = false;
 
     sb.from("videos")
       .select("*, channels(name, handle, avatar_color, owner_id), profiles(username, avatar_color)")
       .eq("is_short", false)
       .order("created_at", { ascending: false })
-      .limit(30)
+      .range(0, 19)
       .then(function(res){
         if(res.error){
           feedList.innerHTML = emptyState("Errore caricamento: " + res.error.message);
@@ -734,10 +762,42 @@
         }
         if(!res.data || res.data.length === 0){
           feedList.innerHTML = emptyState("Nessun video ancora. Sii il primo a pubblicare!", iconCamera());
+          state.homeFeedHasMore = false;
           return;
         }
         feedList.innerHTML = res.data.map(renderVideoCard).join("");
         attachVideoCardListeners(feedList);
+        state.homeFeedOffset = res.data.length;
+        state.homeFeedHasMore = res.data.length === 20;
+      });
+  }
+
+  function loadMoreHomeFeed(){
+    if(!state.homeFeedHasMore || state.homeFeedLoadingMore) return;
+    var feedList = el("feed-list");
+    if(!feedList) return;
+    state.homeFeedLoadingMore = true;
+    var spinner = el("feed-more-spinner");
+    if(spinner) spinner.innerHTML = '<div class="progress-ring-wrap" style="padding:20px 0;"><div class="spinner"></div></div>';
+    sb.from("videos")
+      .select("*, channels(name, handle, avatar_color, owner_id), profiles(username, avatar_color)")
+      .eq("is_short", false)
+      .order("created_at", { ascending: false })
+      .range(state.homeFeedOffset, state.homeFeedOffset + 19)
+      .then(function(res){
+        state.homeFeedLoadingMore = false;
+        if(spinner) spinner.innerHTML = "";
+        var newVideos = res.data || [];
+        if(newVideos.length === 0){ state.homeFeedHasMore = false; return; }
+        newVideos.forEach(function(v){
+          var wrapper = document.createElement("div");
+          wrapper.innerHTML = renderVideoCard(v);
+          var card = wrapper.firstElementChild;
+          feedList.appendChild(card);
+          attachSingleCardListeners(card);
+        });
+        state.homeFeedOffset += newVideos.length;
+        state.homeFeedHasMore = newVideos.length === 20;
       });
   }
 
@@ -849,7 +909,7 @@
         renderOverlaysHtml(s.text_overlays) +
         '<div class="shorts-tap-zone" id="shorts-tap"></div>' +
         '<div class="shorts-info">' +
-          '<div class="sh-channel" id="short-author-row"><div class="avatar" style="width:30px;height:30px;font-size:12px;background:' + author.color + '">' + initials(author.name) + '</div>' + esc(author.name) + '</div>' +
+          '<div class="sh-channel" id="short-author-row"><div class="avatar" style="width:30px;height:30px;font-size:12px;background:' + author.color + '">' + avatarInner(author.name, author.avatarUrl) + '</div>' + esc(author.name) + '</div>' +
           '<div class="sh-title">' + esc(s.title) + '</div>' +
         '</div>' +
         '<div class="shorts-actions">' +
@@ -1028,12 +1088,31 @@
         }
         box.innerHTML = comments.map(function(c){
           var p = c.profiles || {};
+          var isOwn = state.session && state.session.user.id === c.user_id;
           return '<div class="comment">' +
-            '<div class="avatar" style="background:' + (p.avatar_color || "#7c5cff") + '">' + initials(p.username) + '</div>' +
+            '<div class="avatar" style="background:' + (p.avatar_color || "#7c5cff") + '">' + avatarInner(p.username, p.avatar_url) + '</div>' +
             '<div class="comment-body"><div class="comment-author">' + esc(p.username) + '<span class="comment-time">' + timeAgo(c.created_at) + '</span></div>' +
-            '<div class="comment-text">' + esc(c.content) + '</div></div>' +
+            '<div class="comment-text" id="scomment-text-' + c.id + '">' + esc(c.content) + '</div>' +
+            (isOwn ? '<div style="margin-top:4px;display:flex;gap:12px;"><button class="scomment-action-btn" data-action="edit" data-id="' + c.id + '" style="background:none;border:none;color:var(--text-faint);font-size:11.5px;padding:0;">Modifica</button><button class="scomment-action-btn" data-action="delete" data-id="' + c.id + '" style="background:none;border:none;color:var(--danger);font-size:11.5px;padding:0;">Elimina</button></div>' : '') +
+            '</div>' +
           '</div>';
         }).join("");
+        box.querySelectorAll(".scomment-action-btn").forEach(function(btn){
+          btn.addEventListener("click", function(){
+            var id = btn.getAttribute("data-id");
+            if(btn.getAttribute("data-action") === "delete"){
+              if(!confirm("Eliminare questo commento?")) return;
+              sb.from("comments").delete().eq("id", id).then(function(){ loadShortsComments(videoId); });
+            } else {
+              var current = el("scomment-text-" + id) ? el("scomment-text-" + id).textContent : "";
+              var newText = prompt("Modifica il commento:", current);
+              if(newText === null) return;
+              newText = newText.trim();
+              if(!newText) return;
+              sb.from("comments").update({ content: newText }).eq("id", id).then(function(){ loadShortsComments(videoId); });
+            }
+          });
+        });
       });
   }
 
@@ -1052,6 +1131,16 @@
   function shareShort(s){
     shareContent(s);
   }
+  function reportContentFlow(videoId){
+    if(!state.session){ showAuthRequired(); return; }
+    var reason = prompt("Perche vuoi segnalare questo contenuto? (es. contenuto inappropriato, spam, ecc.)");
+    if(!reason || !reason.trim()) return;
+    sb.from("reports").insert({ reporter_id: state.session.user.id, video_id: videoId, reason: reason.trim() }).then(function(res){
+      if(res.error){ alert("Errore: " + res.error.message); return; }
+      alert("Segnalazione inviata. Grazie per aver contribuito a mantenere l'app sicura.");
+    });
+  }
+
   function shareContent(v){
     var shareData = {
       title: v.title,
@@ -1111,10 +1200,10 @@
       : '';
     return '' +
     '<div class="video-card" data-video-id="' + v.id + '">' +
-      '<div class="thumb-wrap">' + thumbHtml + badge + galleryBadge + renderOverlaysHtml(v.text_overlays) + deleteBtn +
+      '<div class="thumb-wrap"' + (!isPhoto ? ' data-video-src="' + esc(v.video_url) + '"' : '') + '>' + thumbHtml + badge + galleryBadge + renderOverlaysHtml(v.text_overlays) + deleteBtn +
       '</div>' +
       '<div class="vc-meta">' +
-        '<div class="avatar" style="background:' + color + '">' + initials(author.name) + '</div>' +
+        '<div class="avatar" style="background:' + color + '">' + avatarInner(author.name, author.avatarUrl) + '</div>' +
         '<div class="vc-text">' +
           '<p class="vc-title">' + esc(v.title) + '</p>' +
           '<p class="vc-sub">' + esc(author.name || "") + '<span class="dot">&middot;</span>' + fmtViews(v.views) + '<span class="dot">&middot;</span>' + timeAgo(v.created_at) + '</p>' +
@@ -1136,6 +1225,42 @@
         deleteVideoFlow(delBtn.getAttribute("data-video-id"), delBtn.closest(".video-card"));
       });
     }
+    var thumbWrap = card.querySelector(".thumb-wrap[data-video-src]");
+    if(thumbWrap && "IntersectionObserver" in window){
+      getFeedPreviewObserver().observe(thumbWrap);
+    }
+  }
+
+  var _feedPreviewObserver = null;
+  function getFeedPreviewObserver(){
+    if(_feedPreviewObserver) return _feedPreviewObserver;
+    _feedPreviewObserver = new IntersectionObserver(function(entries){
+      entries.forEach(function(entry){
+        var wrap = entry.target;
+        if(entry.isIntersecting && entry.intersectionRatio >= 0.6){
+          if(wrap.querySelector(".feed-preview-video")) return;
+          var src = wrap.getAttribute("data-video-src");
+          if(!src) return;
+          var vid = document.createElement("video");
+          vid.className = "feed-preview-video";
+          vid.src = src;
+          vid.muted = true;
+          vid.loop = true;
+          vid.playsInline = true;
+          vid.preload = "metadata";
+          wrap.appendChild(vid);
+          var playPromise = vid.play();
+          if(playPromise && playPromise.catch) playPromise.catch(function(){});
+        } else {
+          var existing = wrap.querySelector(".feed-preview-video");
+          if(existing){
+            try{ existing.pause(); }catch(e){}
+            existing.remove();
+          }
+        }
+      });
+    }, { threshold: [0, 0.6] });
+    return _feedPreviewObserver;
   }
 
   function toggleVideoEditForm(v){
@@ -1215,10 +1340,29 @@
     input.addEventListener("input", function(){
       clearTimeout(timer);
       var q = input.value.trim();
-      if(q.length < 2){ resultsBox.innerHTML = ""; return; }
+      if(q.length < 2){ loadExploreChannels(resultsBox); return; }
       timer = setTimeout(function(){ doSearch(q, resultsBox); }, 350);
     });
-    input.focus();
+    loadExploreChannels(resultsBox);
+  }
+  function loadExploreChannels(box){
+    box.innerHTML = '<div class="progress-ring-wrap"><div class="spinner"></div></div>';
+    sb.from("channels").select("*").order("created_at",{ascending:false}).limit(20).then(function(res){
+      var channels = res.data || [];
+      if(channels.length === 0){
+        box.innerHTML = emptyState("Nessun canale da esplorare ancora.");
+        return;
+      }
+      box.innerHTML = '<div class="section-title">Esplora canali</div>' + channels.map(function(c){
+        return '<div class="glass list-channel" data-channel-id="' + c.id + '">' +
+          '<div class="avatar" style="background:' + c.avatar_color + '">' + initials(c.name) + '</div>' +
+          '<div><div class="list-channel-name">' + esc(c.name) + '</div><div class="list-channel-handle">@' + esc(c.handle) + '</div></div>' +
+        '</div>';
+      }).join("");
+      box.querySelectorAll(".list-channel").forEach(function(row){
+        row.addEventListener("click", function(){ openChannel(row.getAttribute("data-channel-id")); });
+      });
+    });
   }
   function doSearch(q, box){
     box.innerHTML = '<div class="progress-ring-wrap"><div class="spinner"></div></div>';
@@ -1332,7 +1476,7 @@
     container.innerHTML =
       '<h1 class="page-title">Profilo</h1>' +
       '<div class="glass" id="account-row" style="padding:18px;display:flex;align-items:center;gap:14px;cursor:pointer;">' +
-        '<div class="avatar" style="width:52px;height:52px;font-size:18px;background:' + (state.profile ? state.profile.avatar_color : "#7c5cff") + '">' + initials(state.profile ? state.profile.username : "?") + '</div>' +
+        '<div class="avatar" style="width:52px;height:52px;font-size:18px;background:' + (state.profile ? state.profile.avatar_color : "#7c5cff") + '">' + avatarInner(state.profile ? state.profile.username : "?", state.profile ? state.profile.avatar_url : null) + '</div>' +
         '<div style="flex:1;"><div style="font-weight:700;font-size:16px;">' + esc(state.profile ? state.profile.username : "") + '</div>' +
         '<div style="font-size:12.5px;color:var(--text-muted);">' + esc(state.session.user.email) + '</div></div>' +
         '<svg viewBox="0 0 24 24" fill="none" style="width:18px;height:18px;color:var(--text-faint);flex-shrink:0;"><path d="m9 18 6-6-6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>' +
@@ -1398,6 +1542,15 @@
     var msg = '';
     container.innerHTML =
       '<h1 class="page-title">Impostazioni</h1>' +
+      '<div class="section-title">Foto profilo</div>' +
+      '<div style="display:flex;align-items:center;gap:16px;margin-bottom:20px;">' +
+        '<div class="avatar" id="settings-avatar-preview" style="width:64px;height:64px;font-size:22px;background:' + (state.profile ? state.profile.avatar_color : "#7c5cff") + '">' + avatarInner(state.profile ? state.profile.username : "?", state.profile ? state.profile.avatar_url : null) + '</div>' +
+        '<div>' +
+          '<button class="btn btn-ghost btn-sm" id="upload-avatar-btn">Cambia foto</button>' +
+          (state.profile && state.profile.avatar_url ? '<button class="btn btn-ghost btn-sm" id="remove-avatar-btn" style="margin-left:8px;color:var(--danger);">Rimuovi</button>' : '') +
+          '<input type="file" id="avatar-file-input" accept="image/*" style="display:none;">' +
+        '</div>' +
+      '</div>' +
       '<div class="section-title">Nome utente</div>' +
       '<div class="field"><input type="text" id="settings-username" value="' + esc(state.profile ? state.profile.username : "") + '"></div>' +
       '<button class="btn btn-ghost btn-sm" id="save-username">Salva nome utente</button>' +
@@ -1421,6 +1574,13 @@
           '<div style="font-size:12px;color:var(--text-muted);margin-top:2px;" id="push-status-label">Anche a schermo bloccato</div></div>' +
           '<div id="push-toggle-switch" style="width:44px;height:26px;border-radius:13px;background:var(--glass-strong);border:1px solid var(--border);position:relative;flex-shrink:0;cursor:pointer;">' +
             '<div id="push-toggle-knob" style="width:20px;height:20px;border-radius:50%;background:var(--text-faint);position:absolute;top:2px;left:2px;transition:transform .15s, background .15s;"></div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="row-between" style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border);">' +
+          '<div><div style="font-weight:600;font-size:14px;">Nuove pubblicazioni</div>' +
+          '<div style="font-size:12px;color:var(--text-muted);margin-top:2px;">Avvisami quando qualcuno pubblica</div></div>' +
+          '<div id="notify-video-toggle" style="width:44px;height:26px;border-radius:13px;background:var(--glass-strong);border:1px solid var(--border);position:relative;flex-shrink:0;cursor:pointer;">' +
+            '<div id="notify-video-knob" style="width:20px;height:20px;border-radius:50%;position:absolute;top:2px;left:2px;transition:transform .15s, background .15s;"></div>' +
           '</div>' +
         '</div>' +
       '</div>' +
@@ -1475,6 +1635,56 @@
 
     renderUsageSettings();
     renderPushSettings();
+    renderNotifyVideoToggle();
+
+    el("upload-avatar-btn").addEventListener("click", function(){
+      el("avatar-file-input").click();
+    });
+    el("avatar-file-input").addEventListener("change", function(e){
+      var f = e.target.files[0];
+      if(!f) return;
+      var ext = f.name.split(".").pop();
+      var path = state.session.user.id + "/avatar_" + Date.now() + "." + ext;
+      sb.storage.from("thumbnails").upload(path, f).then(function(uploadRes){
+        if(uploadRes.error){ alert("Errore: " + uploadRes.error.message); return; }
+        var url = sb.storage.from("thumbnails").getPublicUrl(path).data.publicUrl;
+        sb.from("profiles").update({ avatar_url: url }).eq("id", state.session.user.id).then(function(res){
+          if(res.error){ alert("Errore: " + res.error.message); return; }
+          state.profile.avatar_url = url;
+          renderAccountSettings();
+        });
+      });
+    });
+    var removeBtn = el("remove-avatar-btn");
+    if(removeBtn){
+      removeBtn.addEventListener("click", function(){
+        sb.from("profiles").update({ avatar_url: null }).eq("id", state.session.user.id).then(function(res){
+          if(res.error){ alert("Errore: " + res.error.message); return; }
+          state.profile.avatar_url = null;
+          renderAccountSettings();
+        });
+      });
+    }
+  }
+
+  function renderNotifyVideoToggle(){
+    var knob = el("notify-video-knob");
+    var toggle = el("notify-video-toggle");
+    var enabled = state.profile ? (state.profile.notify_new_video !== false) : true;
+    function setUI(active){
+      knob.style.transform = active ? "translateX(18px)" : "translateX(0)";
+      knob.style.background = active ? "var(--ember)" : "var(--text-faint)";
+    }
+    setUI(enabled);
+    toggle.onclick = function(){
+      var newVal = !enabled;
+      sb.from("profiles").update({ notify_new_video: newVal }).eq("id", state.session.user.id).then(function(res){
+        if(res.error){ alert("Errore: " + res.error.message); return; }
+        enabled = newVal;
+        if(state.profile) state.profile.notify_new_video = newVal;
+        setUI(enabled);
+      });
+    };
   }
 
   /* ---------------- Push notifications ---------------- */
@@ -1698,7 +1908,7 @@
       var isOwner = state.session && state.session.user.id === p.id;
       container.innerHTML =
         '<div class="channel-header">' +
-          '<div class="channel-avatar-lg" style="background:' + p.avatar_color + '">' + initials(p.username) + '</div>' +
+          '<div class="channel-avatar-lg" style="background:' + p.avatar_color + '">' + avatarInner(p.username, p.avatar_url) + '</div>' +
           '<div class="channel-name">' + esc(p.username) + '</div>' +
           '<div class="channel-handle">Pubblica dal profilo, senza canale</div>' +
         '</div>' +
@@ -1962,7 +2172,7 @@
         '<div class="vp-title">' + esc(v.title) + '</div>' +
         '<div class="vp-sub">' + fmtViews((v.views||0)+1) + ' &middot; ' + timeAgo(v.created_at) + '</div>' +
         '<div class="vp-channel-row">' +
-          '<div class="avatar" style="background:' + author.color + '" id="vp-channel-avatar">' + initials(author.name) + '</div>' +
+          '<div class="avatar" style="background:' + author.color + '" id="vp-channel-avatar">' + avatarInner(author.name, author.avatarUrl) + '</div>' +
           '<div style="flex:1;" id="vp-channel-name"><div style="font-weight:600;font-size:14.5px;">' + esc(author.name) + '</div></div>' +
           (isOwnAuthor || author.kind !== "channel" ? '' : '<button class="btn ' + (isSubscribed ? "btn-ghost" : "btn-violet") + ' btn-sm" id="vp-sub-btn">' + (isSubscribed ? "Iscritto" : "Iscriviti") + '</button>') +
         '</div>' +
@@ -1970,6 +2180,7 @@
           '<button class="like-btn" id="vp-share-btn"><svg viewBox="0 0 24 24" fill="none"><path d="M4 12v6a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-6M16 6l-4-4-4 4M12 2v14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>Condividi</button>' +
           (isOwnAuthor ? '<button class="like-btn" id="vp-edit-btn"><svg viewBox="0 0 24 24" fill="none"><path d="m16.5 3.5 4 4L8 20H4v-4L16.5 3.5Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>Modifica</button>' : '') +
           (isOwnAuthor ? '<button class="like-btn" id="vp-delete-btn" style="color:var(--danger);border-color:rgba(255,77,77,0.35);"><svg viewBox="0 0 24 24" fill="none"><path d="M4 7h16M9 7V4h6v3m-8 0 1 13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1l1-13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>Elimina</button>' : '') +
+          (!isOwnAuthor ? '<button class="like-btn" id="vp-report-btn" style="color:var(--text-faint);"><svg viewBox="0 0 24 24" fill="none"><path d="M12 9v4m0 4h.01M4.5 19h15a1 1 0 0 0 .87-1.5l-7.5-13a1 1 0 0 0-1.74 0l-7.5 13A1 1 0 0 0 4.5 19Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>Segnala</button>' : '') +
         '</div>' +
         '<div id="vp-edit-form"></div>' +
         (v.description ? '<div class="vp-desc" id="vp-desc-box">' + esc(v.description) + '</div>' : '<div id="vp-desc-box"></div>') +
@@ -1979,6 +2190,11 @@
         '</div>';
 
       el("vp-share-btn").addEventListener("click", function(){ shareContent(v); });
+
+      var reportBtn = el("vp-report-btn");
+      if(reportBtn){
+        reportBtn.addEventListener("click", function(){ reportContentFlow(v.id); });
+      }
 
       var editBtn = el("vp-edit-btn");
       if(editBtn){
@@ -2069,13 +2285,42 @@
         }
         box.innerHTML = comments.map(function(c){
           var p = c.profiles || {};
+          var isOwn = state.session && state.session.user.id === c.user_id;
           return '<div class="comment">' +
-            '<div class="avatar" style="background:' + (p.avatar_color || "#7c5cff") + '">' + initials(p.username) + '</div>' +
+            '<div class="avatar" style="background:' + (p.avatar_color || "#7c5cff") + '">' + avatarInner(p.username, p.avatar_url) + '</div>' +
             '<div class="comment-body"><div class="comment-author">' + esc(p.username) + '<span class="comment-time">' + timeAgo(c.created_at) + '</span></div>' +
-            '<div class="comment-text">' + esc(c.content) + '</div></div>' +
+            '<div class="comment-text" id="comment-text-' + c.id + '">' + esc(c.content) + '</div>' +
+            (isOwn ? '<div style="margin-top:4px;display:flex;gap:12px;"><button class="comment-action-btn" data-action="edit" data-id="' + c.id + '" data-video="' + videoId + '" style="background:none;border:none;color:var(--text-faint);font-size:11.5px;padding:0;">Modifica</button><button class="comment-action-btn" data-action="delete" data-id="' + c.id + '" data-video="' + videoId + '" style="background:none;border:none;color:var(--danger);font-size:11.5px;padding:0;">Elimina</button></div>' : '') +
+            '</div>' +
           '</div>';
         }).join("");
+        box.querySelectorAll(".comment-action-btn").forEach(function(btn){
+          btn.addEventListener("click", function(){
+            var id = btn.getAttribute("data-id");
+            var vid = btn.getAttribute("data-video");
+            if(btn.getAttribute("data-action") === "delete") deleteCommentFlow(id, vid, loadComments);
+            else editCommentFlow(id, vid, loadComments);
+          });
+        });
       });
+  }
+  function editCommentFlow(commentId, videoId, reloadFn){
+    var currentText = el("comment-text-" + commentId) ? el("comment-text-" + commentId).textContent : "";
+    var newText = prompt("Modifica il commento:", currentText);
+    if(newText === null) return;
+    newText = newText.trim();
+    if(!newText) return;
+    sb.from("comments").update({ content: newText }).eq("id", commentId).then(function(res){
+      if(res.error){ alert("Errore: " + res.error.message); return; }
+      reloadFn(videoId);
+    });
+  }
+  function deleteCommentFlow(commentId, videoId, reloadFn){
+    if(!confirm("Eliminare questo commento?")) return;
+    sb.from("comments").delete().eq("id", commentId).then(function(res){
+      if(res.error){ alert("Errore: " + res.error.message); return; }
+      reloadFn(videoId);
+    });
   }
   function submitComment(videoId, input){
     var text = input.value.trim();
@@ -2238,12 +2483,16 @@
 
   function authorOf(v){
     if(v.channel_id && v.channels){
-      return { kind: "channel", id: v.channel_id, name: v.channels.name, color: v.channels.avatar_color || "#7c5cff" };
+      return { kind: "channel", id: v.channel_id, name: v.channels.name, color: v.channels.avatar_color || "#7c5cff", avatarUrl: null };
     }
     if(v.owner_id && v.profiles){
-      return { kind: "profile", id: v.owner_id, name: v.profiles.username, color: v.profiles.avatar_color || "#7c5cff" };
+      return { kind: "profile", id: v.owner_id, name: v.profiles.username, color: v.profiles.avatar_color || "#7c5cff", avatarUrl: v.profiles.avatar_url || null };
     }
-    return { kind: "channel", id: v.channel_id, name: "", color: "#7c5cff" };
+    return { kind: "channel", id: v.channel_id, name: "", color: "#7c5cff", avatarUrl: null };
+  }
+  function avatarInner(name, avatarUrl){
+    if(avatarUrl) return '<img src="' + esc(avatarUrl) + '" style="width:100%;height:100%;border-radius:50%;object-fit:cover;display:block;">';
+    return initials(name);
   }
   function openAuthor(a){
     if(a.kind === "profile") openUserProfile(a.id);
@@ -2816,6 +3065,13 @@
       callback(null, 0);
     }
   }
+
+  window.addEventListener("scroll", function(){
+    if(state.currentView !== "home") return;
+    if(window.innerHeight + window.scrollY >= document.body.offsetHeight - 400){
+      loadMoreHomeFeed();
+    }
+  });
 
   /* ---------------- Boot ---------------- */
   sb.auth.getSession().then(function(res){
