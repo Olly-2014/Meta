@@ -93,6 +93,8 @@
 
   /* ---------- Video card (feed) ---------- */
   .video-card{margin-bottom:20px;}
+  .video-card.live-new{animation:liveIn .5s ease;}
+  @keyframes liveIn{from{opacity:0;transform:translateY(-12px);background:var(--ember-dim);}to{opacity:1;transform:translateY(0);}}
   .thumb-wrap{position:relative;width:100%;aspect-ratio:16/9;border-radius:16px;overflow:hidden;background:#141420;}
   .thumb-wrap img,.thumb-wrap video{width:100%;height:100%;object-fit:cover;display:block;}
   .thumb-placeholder{width:100%;height:100%;display:flex;align-items:center;justify-content:center;
@@ -628,6 +630,38 @@
       .subscribe();
   }
 
+  function subscribeToLiveFeed(){
+    sb.channel("videos-live-feed")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "videos" }, function(payload){
+        handleNewVideoRealtime(payload.new);
+      })
+      .subscribe();
+  }
+
+  function handleNewVideoRealtime(row){
+    sb.from("videos").select("*, channels(name, handle, avatar_color, owner_id), profiles(username, avatar_color)")
+      .eq("id", row.id).single().then(function(res){
+        var v = res.data;
+        if(!v) return;
+        if(v.is_short){
+          if(state.currentView === "home" && el("shorts-section")) loadShortsRail();
+          return;
+        }
+        if(state.currentView === "home"){
+          var feedList = el("feed-list");
+          if(!feedList) return;
+          var emptyMsg = feedList.querySelector(".empty");
+          if(emptyMsg) feedList.innerHTML = "";
+          var wrapper = document.createElement("div");
+          wrapper.innerHTML = renderVideoCard(v);
+          var card = wrapper.firstElementChild;
+          card.classList.add("live-new");
+          feedList.insertBefore(card, feedList.firstChild);
+          attachSingleCardListeners(card);
+        }
+      });
+  }
+
   function notifIcon(type){
     if(type === "new_video") return '<svg viewBox="0 0 24 24" fill="none"><path d="M8 5v14l11-7Z" fill="currentColor"/></svg>';
     if(type === "new_comment") return '<svg viewBox="0 0 24 24" fill="none"><path d="M4 5h16v11H8l-4 4V5Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>';
@@ -1060,17 +1094,19 @@
     '</div>';
   }
   function attachVideoCardListeners(container){
-    container.querySelectorAll(".video-card").forEach(function(card){
-      card.addEventListener("click", function(){
-        openVideo(card.getAttribute("data-video-id"));
-      });
+    container.querySelectorAll(".video-card").forEach(attachSingleCardListeners);
+  }
+  function attachSingleCardListeners(card){
+    card.addEventListener("click", function(){
+      openVideo(card.getAttribute("data-video-id"));
     });
-    container.querySelectorAll(".vc-delete-btn").forEach(function(btn){
-      btn.addEventListener("click", function(e){
+    var delBtn = card.querySelector(".vc-delete-btn");
+    if(delBtn){
+      delBtn.addEventListener("click", function(e){
         e.stopPropagation();
-        deleteVideoFlow(btn.getAttribute("data-video-id"), btn.closest(".video-card"));
+        deleteVideoFlow(delBtn.getAttribute("data-video-id"), delBtn.closest(".video-card"));
       });
-    });
+    }
   }
 
   function deleteVideoFlow(videoId, cardEl, onDone){
@@ -1262,6 +1298,17 @@
       '<button class="btn btn-ghost btn-sm" id="save-password">Aggiorna password</button>' +
       '<p id="password-msg" style="font-size:12.5px;margin-top:8px;"></p>' +
 
+      '<div class="section-title">Notifiche push</div>' +
+      '<div class="glass" style="padding:16px;margin-bottom:14px;">' +
+        '<div class="row-between">' +
+          '<div><div style="font-weight:600;font-size:14px;">Ricevi notifiche</div>' +
+          '<div style="font-size:12px;color:var(--text-muted);margin-top:2px;" id="push-status-label">Anche a schermo bloccato</div></div>' +
+          '<div id="push-toggle-switch" style="width:44px;height:26px;border-radius:13px;background:var(--glass-strong);border:1px solid var(--border);position:relative;flex-shrink:0;cursor:pointer;">' +
+            '<div id="push-toggle-knob" style="width:20px;height:20px;border-radius:50%;background:var(--text-faint);position:absolute;top:2px;left:2px;transition:transform .15s, background .15s;"></div>' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+
       '<div class="section-title">Utilizzo</div>' +
       '<div class="glass" style="padding:16px;margin-bottom:14px;">' +
         '<div class="row-between" style="margin-bottom:14px;">' +
@@ -1311,7 +1358,93 @@
     });
 
     renderUsageSettings();
+    renderPushSettings();
   }
+
+  /* ---------------- Push notifications ---------------- */
+  var VAPID_PUBLIC_KEY = "BCrYxUHveMTMxHwU44oWuA-q3j8gWDkPZZVvcbaDIIZyPcMcahFbuiYTI1Szvex4natYE1i2cvOToR1TzYua108";
+
+  function urlBase64ToUint8Array(base64String){
+    var padding = "=".repeat((4 - base64String.length % 4) % 4);
+    var base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+    var rawData = atob(base64);
+    var outputArray = new Uint8Array(rawData.length);
+    for(var i = 0; i < rawData.length; i++){ outputArray[i] = rawData.charCodeAt(i); }
+    return outputArray;
+  }
+
+  function isStandalone(){
+    return window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+  }
+
+  function renderPushSettings(){
+    var label = el("push-status-label");
+    var knob = el("push-toggle-knob");
+    var toggle = el("push-toggle-switch");
+    if(!("serviceWorker" in navigator) || !("PushManager" in window)){
+      label.textContent = "Non supportato su questo browser";
+      toggle.style.opacity = "0.4";
+      return;
+    }
+    if(!isStandalone()){
+      label.textContent = "Aggiungi l'app alla schermata Home per attivarle";
+      toggle.style.opacity = "0.4";
+      return;
+    }
+
+    navigator.serviceWorker.getRegistration().then(function(reg){
+      if(!reg){ setPushUI(false); return; }
+      reg.pushManager.getSubscription().then(function(sub){
+        setPushUI(!!sub);
+      });
+    });
+
+    function setPushUI(active){
+      knob.style.transform = active ? "translateX(18px)" : "translateX(0)";
+      knob.style.background = active ? "var(--ember)" : "var(--text-faint)";
+      label.textContent = active ? "Attive su questo dispositivo" : "Anche a schermo bloccato";
+    }
+
+    toggle.onclick = function(){
+      navigator.serviceWorker.getRegistration().then(function(reg){
+        if(!reg){ alert("Servizio non ancora pronto, riprova tra un istante."); return; }
+        reg.pushManager.getSubscription().then(function(existing){
+          if(existing){
+            existing.unsubscribe().then(function(){
+              sb.from("push_subscriptions").delete().eq("endpoint", existing.endpoint).then(function(){
+                setPushUI(false);
+              });
+            });
+          } else {
+            Notification.requestPermission().then(function(perm){
+              if(perm !== "granted"){ alert("Permesso negato per le notifiche."); return; }
+              reg.pushManager.subscribe({
+                userVisibleOnly: true,
+                applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+              }).then(function(sub){
+                var raw = sub.toJSON();
+                sb.from("push_subscriptions").insert({
+                  user_id: state.session.user.id,
+                  endpoint: raw.endpoint,
+                  p256dh: raw.keys.p256dh,
+                  auth: raw.keys.auth
+                }).then(function(res){
+                  if(res.error && res.error.message.indexOf("duplicate") === -1){
+                    alert("Errore: " + res.error.message);
+                    return;
+                  }
+                  setPushUI(true);
+                });
+              }).catch(function(err){
+                alert("Impossibile attivare le notifiche: " + err.message);
+              });
+            });
+          }
+        });
+      });
+    };
+  }
+
 
   /* ---------------- Usage limit / screen time ---------------- */
   var USAGE_OPTIONS = [15, 30, 60, 90, 120];
@@ -2363,6 +2496,7 @@
     }
     startUsageTracking();
     checkUsageLock();
+    subscribeToLiveFeed();
   });
 
   sb.auth.onAuthStateChange(function(event, session){
@@ -2370,6 +2504,10 @@
       state.session = null;
     }
   });
+
+  if("serviceWorker" in navigator){
+    navigator.serviceWorker.register("sw.js").catch(function(){});
+  }
 
 })();
 </script>
