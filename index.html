@@ -2655,17 +2655,28 @@
   }
 
   function compressVideoFile(file, callback){
+    var callbackFired = false;
+    function safeCallback(resultFile){
+      if(callbackFired) return;
+      callbackFired = true;
+      clearTimeout(hardTimeout);
+      callback(resultFile);
+    }
+    var hardTimeout = setTimeout(function(){
+      safeCallback(file);
+    }, 15000);
+
     try{
       if(!("MediaRecorder" in window) || !HTMLVideoElement.prototype.captureStream){
-        callback(file); return;
+        safeCallback(file); return;
       }
       var mimeCandidates = ["video/mp4;codecs=h264", "video/mp4"];
       var chosenMime = null;
       for(var i=0;i<mimeCandidates.length;i++){
         if(MediaRecorder.isTypeSupported(mimeCandidates[i])){ chosenMime = mimeCandidates[i]; break; }
       }
-      if(!chosenMime){ callback(file); return; }
-      if(file.size < 3 * 1024 * 1024){ callback(file); return; }
+      if(!chosenMime){ safeCallback(file); return; }
+      if(file.size < 3 * 1024 * 1024){ safeCallback(file); return; }
 
       var videoEl = document.createElement("video");
       videoEl.muted = false;
@@ -2677,7 +2688,7 @@
         if(settled) return;
         settled = true;
         try{ URL.revokeObjectURL(url); }catch(e){}
-        callback(resultFile);
+        safeCallback(resultFile);
       }
 
       videoEl.addEventListener("loadedmetadata", function(){
@@ -2752,7 +2763,7 @@
 
       videoEl.addEventListener("error", function(){ done(file); });
     } catch(e){
-      callback(file);
+      safeCallback(file);
     }
   }
 
