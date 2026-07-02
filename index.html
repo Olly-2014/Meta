@@ -152,6 +152,16 @@
   .media-text-overlay{position:absolute;transform:translate(-50%,-50%);font-weight:700;text-shadow:0 2px 8px rgba(0,0,0,0.55);
     pointer-events:none;font-size:clamp(13px,4vw,26px);max-width:90%;text-align:center;line-height:1.2;}
   .player-wrap video{width:100%;display:block;max-height:56vh;background:#000;}
+  .carousel-track{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;}
+  .carousel-track::-webkit-scrollbar{display:none;}
+  .carousel-slide{flex:0 0 100%;scroll-snap-align:center;position:relative;display:flex;align-items:center;justify-content:center;background:#000;}
+  .carousel-slide img{width:100%;max-height:70vh;object-fit:contain;display:block;}
+  .carousel-dots{position:absolute;bottom:10px;left:0;right:0;display:flex;justify-content:center;gap:6px;z-index:4;}
+  .carousel-dot{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,0.4);transition:width .15s,background .15s;}
+  .carousel-dot.active{background:#fff;width:16px;border-radius:3px;}
+  .gallery-badge{position:absolute;top:8px;left:8px;width:24px;height:24px;border-radius:6px;background:rgba(0,0,0,0.6);
+    display:flex;align-items:center;justify-content:center;}
+  .gallery-badge svg{width:13px;height:13px;}
   .vp-title{font-family:'Space Grotesk';font-size:19px;font-weight:700;margin:16px 0 6px;line-height:1.3;}
   .vp-sub{color:var(--text-muted);font-size:13px;font-family:'IBM Plex Mono';}
   .vp-channel-row{display:flex;align-items:center;gap:12px;margin:18px 0;}
@@ -198,6 +208,15 @@
   .section-title{font-size:13px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.04em;margin:22px 0 12px;}
   .list-channel{display:flex;align-items:center;gap:12px;padding:12px;margin-bottom:8px;}
   .list-channel .avatar{width:44px;height:44px;font-size:16px;}
+
+  .notif-item{display:flex;align-items:flex-start;gap:12px;padding:14px;margin-bottom:8px;position:relative;}
+  .notif-item.unread{background:var(--glass-strong);}
+  .notif-item .notif-icon{width:38px;height:38px;border-radius:50%;background:var(--ember-dim);color:var(--ember);
+    display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  .notif-item .notif-icon svg{width:18px;height:18px;}
+  .notif-text{flex:1;font-size:13.5px;line-height:1.4;color:#e8e8ea;}
+  .notif-time{font-size:11.5px;color:var(--text-faint);margin-top:3px;font-family:'IBM Plex Mono';}
+  .notif-dot{width:8px;height:8px;border-radius:50%;background:var(--ember);flex-shrink:0;margin-top:6px;}
 
   /* ---------- Shorts ---------- */
   .shorts-rail{display:flex;gap:10px;overflow-x:auto;padding-bottom:4px;margin-bottom:22px;-webkit-overflow-scrolling:touch;}
@@ -304,9 +323,15 @@
     <div id="topbar-left" class="back-row">
       <div class="logo"><span class="rec-dot"></span>Meta</div>
     </div>
-    <button class="icon-btn" id="profile-shortcut">
-      <svg viewBox="0 0 24 24" fill="none"><path d="M12 12c2.5 0 4.5-2 4.5-4.5S14.5 3 12 3 7.5 5 7.5 7.5 9.5 12 12 12Zm0 2c-3.3 0-9 1.7-9 5v2h18v-2c0-3.3-5.7-5-9-5Z" fill="currentColor"/></svg>
-    </button>
+    <div id="topbar-right" style="display:flex;align-items:center;gap:8px;">
+      <button class="icon-btn" id="notif-bell" style="position:relative;">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M13.7 21a2 2 0 0 1-3.4 0" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        <span id="notif-badge" style="display:none;position:absolute;top:4px;right:4px;width:9px;height:9px;border-radius:50%;background:var(--ember);border:1.5px solid var(--bg);"></span>
+      </button>
+      <button class="icon-btn" id="profile-shortcut">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M12 12c2.5 0 4.5-2 4.5-4.5S14.5 3 12 3 7.5 5 7.5 7.5 9.5 12 12 12Zm0 2c-3.3 0-9 1.7-9 5v2h18v-2c0-3.3-5.7-5-9-5Z" fill="currentColor"/></svg>
+      </button>
+    </div>
   </div>
 
   <div id="view-home" class="screen"></div>
@@ -314,6 +339,7 @@
   <div id="view-upload" class="screen hidden"></div>
   <div id="view-subs" class="screen hidden"></div>
   <div id="view-shorts" class="screen hidden"></div>
+  <div id="view-notifications" class="screen hidden"></div>
   <div id="view-profile" class="screen hidden"></div>
   <div id="view-settings" class="screen hidden"></div>
   <div id="view-channel" class="screen hidden"></div>
@@ -401,7 +427,7 @@
   }
 
   /* ---------------- Navigation ---------------- */
-  var VIEWS = ["home","search","upload","subs","shorts","profile","settings","channel","video"];
+  var VIEWS = ["home","search","upload","subs","shorts","profile","settings","channel","video","notifications"];
   function showView(name, pushHistory){
     if(pushHistory !== false && state.currentView !== name){
       state.history.push(state.currentView);
@@ -426,7 +452,7 @@
   }
   function updateTopbar(name){
     var left = el("topbar-left");
-    if(name === "video" || name === "channel" || name === "settings" || name === "subs"){
+    if(name === "video" || name === "channel" || name === "settings" || name === "subs" || name === "notifications"){
       left.innerHTML = '<button class="icon-btn" id="btn-back"><svg viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>';
       el("btn-back").addEventListener("click", goBack);
     } else {
@@ -456,6 +482,12 @@
     state.history = [];
     showView("profile", false);
     renderProfile();
+  });
+  el("notif-bell").addEventListener("click", function(){
+    if(!state.session){ showAuthRequired(); return; }
+    state.history = [];
+    showView("notifications", false);
+    renderNotifications();
   });
 
   function showAuthRequired(){
@@ -554,6 +586,8 @@
       el("app").classList.remove("hidden");
       loadMyChannels();
       loadMySubscriptions();
+      refreshNotifBadge();
+      subscribeToNotifications();
       showView(state.currentView || "home", false);
       renderHome();
     });
@@ -570,6 +604,76 @@
     sb.from("subscriptions").select("channel_id").eq("subscriber_id", state.session.user.id).then(function(res){
       state.mySubscriptions = (res.data || []).map(function(r){ return r.channel_id; });
     });
+  }
+
+  /* ---------------- Notifications ---------------- */
+  function refreshNotifBadge(){
+    if(!state.session){ el("notif-badge").style.display = "none"; return; }
+    sb.from("notifications").select("id", {count:"exact", head:true})
+      .eq("user_id", state.session.user.id).eq("is_read", false).then(function(res){
+        el("notif-badge").style.display = (res.count && res.count > 0) ? "block" : "none";
+      });
+  }
+
+  function subscribeToNotifications(){
+    if(!state.session) return;
+    sb.channel("notifications-" + state.session.user.id)
+      .on("postgres_changes", {
+        event: "INSERT", schema: "public", table: "notifications",
+        filter: "user_id=eq." + state.session.user.id
+      }, function(){
+        refreshNotifBadge();
+        if(state.currentView === "notifications") renderNotifications();
+      })
+      .subscribe();
+  }
+
+  function notifIcon(type){
+    if(type === "new_video") return '<svg viewBox="0 0 24 24" fill="none"><path d="M8 5v14l11-7Z" fill="currentColor"/></svg>';
+    if(type === "new_comment") return '<svg viewBox="0 0 24 24" fill="none"><path d="M4 5h16v11H8l-4 4V5Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>';
+    if(type === "new_subscriber") return '<svg viewBox="0 0 24 24" fill="none"><path d="M4 6h16M4 12h16M4 18h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>';
+    return '<svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8"/></svg>';
+  }
+
+  function renderNotifications(){
+    var container = el("view-notifications");
+    container.innerHTML = '<h1 class="page-title">Notifiche</h1><div class="progress-ring-wrap"><div class="spinner"></div></div>';
+    sb.from("notifications").select("*").eq("user_id", state.session.user.id)
+      .order("created_at", {ascending:false}).limit(50).then(function(res){
+        var items = res.data || [];
+        if(items.length === 0){
+          container.innerHTML = '<h1 class="page-title">Notifiche</h1>' + emptyState("Nessuna notifica per ora.");
+          return;
+        }
+        container.innerHTML = '<h1 class="page-title">Notifiche</h1>' +
+          items.map(function(n){
+            return '<div class="glass notif-item ' + (n.is_read ? "" : "unread") + '" data-id="' + n.id + '" data-video-id="' + (n.video_id||"") + '" data-channel-id="' + (n.channel_id||"") + '">' +
+              '<div class="notif-icon">' + notifIcon(n.type) + '</div>' +
+              '<div class="notif-text">' + esc(n.message) + '<div class="notif-time">' + timeAgo(n.created_at) + '</div></div>' +
+              (n.is_read ? '' : '<div class="notif-dot"></div>') +
+            '</div>';
+          }).join("");
+
+        container.querySelectorAll(".notif-item").forEach(function(item){
+          item.addEventListener("click", function(){
+            var id = item.getAttribute("data-id");
+            var videoId = item.getAttribute("data-video-id");
+            var channelId = item.getAttribute("data-channel-id");
+            sb.from("notifications").update({is_read:true}).eq("id", id).then(function(){
+              item.classList.remove("unread");
+              var dot = item.querySelector(".notif-dot");
+              if(dot) dot.remove();
+              refreshNotifBadge();
+            });
+            if(videoId){ openVideo(videoId); }
+            else if(channelId){ openChannel(channelId); }
+          });
+        });
+
+        sb.from("notifications").update({is_read:true}).eq("user_id", state.session.user.id).eq("is_read", false).then(function(){
+          refreshNotifBadge();
+        });
+      });
   }
 
   /* ---------------- Home / Feed ---------------- */
@@ -939,9 +1043,12 @@
     var deleteBtn = deletable
       ? '<button class="vc-delete-btn" data-video-id="' + v.id + '"><svg viewBox="0 0 24 24" fill="none"><path d="M4 7h16M9 7V4h6v3m-8 0 1 13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1l1-13" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>'
       : '';
+    var galleryBadge = (v.media_group && v.media_group.length > 1)
+      ? '<div class="gallery-badge"><svg viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="13" height="13" rx="2" stroke="white" stroke-width="1.8"/><path d="M8 21h11a2 2 0 0 0 2-2V8" stroke="white" stroke-width="1.8"/></svg></div>'
+      : '';
     return '' +
     '<div class="video-card" data-video-id="' + v.id + '">' +
-      '<div class="thumb-wrap">' + thumbHtml + badge + renderOverlaysHtml(v.text_overlays) + deleteBtn +
+      '<div class="thumb-wrap">' + thumbHtml + badge + galleryBadge + renderOverlaysHtml(v.text_overlays) + deleteBtn +
       '</div>' +
       '<div class="vc-meta">' +
         '<div class="avatar" style="background:' + color + '">' + initials(author.name) + '</div>' +
@@ -1124,7 +1231,9 @@
     el("create-channel-btn").addEventListener("click", openCreateChannelFlow);
     el("logout-btn").addEventListener("click", function(){
       sb.auth.signOut().then(function(){
+        sb.removeAllChannels();
         state.session = null; state.profile = null; state.myChannels = []; state.mySubscriptions = [];
+        el("notif-badge").style.display = "none";
         el("app").classList.add("hidden");
         el("auth-screen").classList.remove("hidden");
       });
@@ -1494,9 +1603,23 @@
         (author.kind === "profile" && author.id === state.session.user.id)
       );
       var filterCss = filterCssById(v.filter_name);
-      var mediaHtml = v.media_type === "photo"
-        ? '<div class="player-wrap" style="position:relative;"><img src="' + esc(v.video_url) + '" style="width:100%;display:block;max-height:70vh;object-fit:contain;background:#000;filter:' + filterCss + ';">' + renderOverlaysHtml(v.text_overlays) + '</div>'
-        : '<div class="player-wrap" style="position:relative;"><video controls playsinline poster="' + esc(v.thumbnail_url || "") + '" src="' + esc(v.video_url) + '" style="filter:' + filterCss + ';"></video>' + renderOverlaysHtml(v.text_overlays) + '</div>';
+      var mediaHtml;
+      if(v.media_group && v.media_group.length > 1){
+        mediaHtml = '<div class="player-wrap" style="position:relative;">' +
+          '<div class="carousel-track" id="carousel-track">' +
+            v.media_group.map(function(item){
+              return '<div class="carousel-slide"><img src="' + esc(item.url) + '" style="filter:' + filterCssById(item.filter_name) + ';">' + renderOverlaysHtml(item.text_overlays) + '</div>';
+            }).join("") +
+          '</div>' +
+          '<div class="carousel-dots" id="carousel-dots">' +
+            v.media_group.map(function(_, i){ return '<div class="carousel-dot' + (i===0?" active":"") + '"></div>'; }).join("") +
+          '</div>' +
+        '</div>';
+      } else if(v.media_type === "photo"){
+        mediaHtml = '<div class="player-wrap" style="position:relative;"><img src="' + esc(v.video_url) + '" style="width:100%;display:block;max-height:70vh;object-fit:contain;background:#000;filter:' + filterCss + ';">' + renderOverlaysHtml(v.text_overlays) + '</div>';
+      } else {
+        mediaHtml = '<div class="player-wrap" style="position:relative;"><video controls playsinline poster="' + esc(v.thumbnail_url || "") + '" src="' + esc(v.video_url) + '" style="filter:' + filterCss + ';"></video>' + renderOverlaysHtml(v.text_overlays) + '</div>';
+      }
 
       container.innerHTML =
         mediaHtml +
@@ -1514,6 +1637,15 @@
         (state.session ? '<div class="comment-form"><input type="text" id="comment-input" placeholder="Aggiungi un commento..."><button id="comment-submit">Invia</button></div>' : '') +
         '<div id="comments-list"></div>' +
         '</div>';
+
+      if(v.media_group && v.media_group.length > 1){
+        var track = el("carousel-track");
+        var dots = el("carousel-dots") ? el("carousel-dots").querySelectorAll(".carousel-dot") : [];
+        track.addEventListener("scroll", function(){
+          var idx = Math.round(track.scrollLeft / track.clientWidth);
+          dots.forEach(function(d, i){ d.classList.toggle("active", i === idx); });
+        });
+      }
 
       el("vp-channel-avatar").addEventListener("click", function(){ openAuthor(author); });
       el("vp-channel-name").addEventListener("click", function(){ openAuthor(author); });
@@ -1638,13 +1770,16 @@
         btn.classList.add("active");
         uploadState.mediaType = btn.getAttribute("data-type");
         uploadState.file = null;
+        uploadState.photoGroup = [];
         dropZone.classList.remove("has-file");
         if(uploadState.mediaType === "photo"){
           fileInput.setAttribute("accept", "image/*");
-          dropZone.innerHTML = iconUpload() + '<p>Tocca per scegliere una foto</p>';
+          fileInput.setAttribute("multiple", "multiple");
+          dropZone.innerHTML = iconUpload() + '<p>Tocca per scegliere una o piu\u2019 foto</p>';
           el("short-toggle-label").textContent = "Pubblica come Short";
           el("short-toggle-sub").textContent = "Foto verticale, appare nella fila Shorts in Home";
         } else {
+          fileInput.removeAttribute("multiple");
           fileInput.setAttribute("accept", "video/*");
           dropZone.innerHTML = iconUpload() + '<p>Tocca per scegliere un video</p>';
           el("short-toggle-label").textContent = "Pubblica come Short";
@@ -1686,9 +1821,23 @@
     var fileInput = el("file-input");
     dropZone.addEventListener("click", function(){ fileInput.click(); });
     fileInput.addEventListener("change", function(){
-      var f = fileInput.files[0];
-      if(!f) return;
+      var files = Array.from(fileInput.files || []);
+      if(files.length === 0) return;
+
+      if(uploadState.mediaType === "photo" && files.length > 1){
+        uploadState.file = null;
+        uploadState.photoGroup = files.map(function(f){
+          return { file: f, filterName: "none", textOverlays: [] };
+        });
+        dropZone.classList.add("has-file");
+        dropZone.innerHTML = iconUpload() + '<p>' + files.length + ' foto selezionate &middot; <span style="color:var(--ember);">modifica</span></p>';
+        openGroupEditor();
+        return;
+      }
+
+      var f = files[0];
       uploadState.file = f;
+      uploadState.photoGroup = [];
       uploadState.filterName = uploadState.filterName || "none";
       uploadState.textOverlays = uploadState.textOverlays || [];
       dropZone.classList.add("has-file");
@@ -1696,6 +1845,7 @@
       openMediaEditor(f, uploadState.mediaType);
     });
     dropZone.addEventListener("dblclick", function(){
+      if(uploadState.photoGroup && uploadState.photoGroup.length > 1){ openGroupEditor(); return; }
       if(uploadState.file) openMediaEditor(uploadState.file, uploadState.mediaType);
     });
 
@@ -1741,6 +1891,161 @@
   function openAuthor(a){
     if(a.kind === "profile") openUserProfile(a.id);
     else openChannel(a.id);
+  }
+
+  function openGroupEditor(){
+    var screen = el("editor-screen");
+    var group = uploadState.photoGroup;
+    var idx = 0;
+    var currentUrl = null;
+
+    function render(){
+      if(currentUrl) URL.revokeObjectURL(currentUrl);
+      var item = group[idx];
+      currentUrl = URL.createObjectURL(item.file);
+      var url = currentUrl;
+
+      screen.innerHTML =
+        '<div class="editor-topbar"><button id="editor-cancel">Annulla</button>' +
+          '<span style="color:#fff;font-weight:700;font-size:13.5px;font-family:\'IBM Plex Mono\';">' + (idx+1) + ' / ' + group.length + '</span>' +
+          '<button id="editor-done">Fatto</button></div>' +
+        '<div class="editor-preview-wrap" id="editor-preview">' +
+          (idx > 0 ? '<button id="editor-prev" style="position:absolute;left:8px;top:50%;transform:translateY(-50%);z-index:6;background:rgba(0,0,0,0.5);border:none;border-radius:50%;width:38px;height:38px;color:#fff;">&#8249;</button>' : '') +
+          (idx < group.length-1 ? '<button id="editor-next" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);z-index:6;background:rgba(0,0,0,0.5);border:none;border-radius:50%;width:38px;height:38px;color:#fff;">&#8250;</button>' : '') +
+          '<img id="editor-media" src="' + url + '">' +
+          '<div id="editor-text-layer" style="position:absolute;inset:0;"></div>' +
+        '</div>' +
+        '<div class="editor-color-row" id="editor-color-row" style="display:none;"></div>' +
+        '<div class="editor-topbar" style="padding-top:0;padding-bottom:0;">' +
+          '<button id="editor-add-text">+ Testo</button><div></div>' +
+        '</div>' +
+        '<div class="editor-filter-rail" id="editor-filter-rail"></div>';
+
+      screen.classList.add("active");
+
+      var mediaNode = el("editor-media");
+      var currentFilter = item.filterName || "none";
+      mediaNode.style.filter = filterCssById(currentFilter);
+
+      var filterRail = el("editor-filter-rail");
+      filterRail.innerHTML = FILTERS.map(function(f){
+        return '<div class="editor-filter-chip ' + (f.id === currentFilter ? "selected" : "") + '" data-filter="' + f.id + '">' +
+          '<div class="editor-filter-swatch" style="filter:' + f.css + ';background-image:url(' + url + ');"></div>' +
+          '<span>' + f.label + '</span></div>';
+      }).join("");
+      filterRail.querySelectorAll(".editor-filter-chip").forEach(function(chip){
+        chip.addEventListener("click", function(){
+          filterRail.querySelectorAll(".editor-filter-chip").forEach(function(c){ c.classList.remove("selected"); });
+          chip.classList.add("selected");
+          currentFilter = chip.getAttribute("data-filter");
+          item.filterName = currentFilter;
+          mediaNode.style.filter = filterCssById(currentFilter);
+        });
+      });
+
+      var textLayer = el("editor-text-layer");
+      var localOverlays = (item.textOverlays || []).slice();
+
+      function drawOverlay(ov){
+        var box = document.createElement("div");
+        box.className = "editor-textbox";
+        box.textContent = ov.text;
+        box.style.left = ov.x + "%";
+        box.style.top = ov.y + "%";
+        box.style.color = ov.color;
+        box.contentEditable = "true";
+        box.dataset.id = ov.id;
+        textLayer.appendChild(box);
+
+        box.addEventListener("input", function(){ ov.text = box.textContent; item.textOverlays = localOverlays; });
+        box.addEventListener("focus", function(){ setActiveBox(box, ov); });
+
+        var dragging = false, offX = 0, offY = 0;
+        function startDrag(clientX, clientY){
+          dragging = true;
+          setActiveBox(box, ov);
+          var rect = box.getBoundingClientRect();
+          offX = clientX - (rect.left + rect.width/2);
+          offY = clientY - (rect.top + rect.height/2);
+        }
+        function moveDrag(clientX, clientY){
+          if(!dragging) return;
+          var wrapRect = textLayer.getBoundingClientRect();
+          var x = ((clientX - offX - wrapRect.left) / wrapRect.width) * 100;
+          var y = ((clientY - offY - wrapRect.top) / wrapRect.height) * 100;
+          x = Math.max(4, Math.min(96, x));
+          y = Math.max(4, Math.min(96, y));
+          box.style.left = x + "%";
+          box.style.top = y + "%";
+          ov.x = x; ov.y = y;
+        }
+        function endDrag(){ dragging = false; item.textOverlays = localOverlays; }
+
+        box.addEventListener("touchstart", function(e){ startDrag(e.touches[0].clientX, e.touches[0].clientY); }, {passive:true});
+        box.addEventListener("touchmove", function(e){ moveDrag(e.touches[0].clientX, e.touches[0].clientY); }, {passive:true});
+        box.addEventListener("touchend", endDrag);
+        box.addEventListener("mousedown", function(e){ startDrag(e.clientX, e.clientY); });
+        window.addEventListener("mousemove", function(e){ moveDrag(e.clientX, e.clientY); });
+        window.addEventListener("mouseup", endDrag);
+
+        return box;
+      }
+
+      function setActiveBox(box, ov){
+        textLayer.querySelectorAll(".editor-textbox").forEach(function(b){ b.classList.remove("editing"); });
+        box.classList.add("editing");
+        var colorRow = el("editor-color-row");
+        colorRow.style.display = "flex";
+        colorRow.innerHTML = TEXT_COLORS.map(function(c){
+          return '<div class="editor-color-swatch ' + (ov.color === c ? "selected" : "") + '" style="background:' + c + ';" data-color="' + c + '"></div>';
+        }).join("") + '<div class="editor-color-swatch" style="background:transparent;border-color:var(--danger);display:flex;align-items:center;justify-content:center;color:var(--danger);font-size:14px;" id="editor-del-text">&times;</div>';
+        colorRow.querySelectorAll("[data-color]").forEach(function(sw){
+          sw.addEventListener("click", function(){
+            var c = sw.getAttribute("data-color");
+            ov.color = c;
+            box.style.color = c;
+            item.textOverlays = localOverlays;
+            colorRow.querySelectorAll(".editor-color-swatch").forEach(function(s){ s.classList.remove("selected"); });
+            sw.classList.add("selected");
+          });
+        });
+        el("editor-del-text").addEventListener("click", function(){
+          box.remove();
+          localOverlays = localOverlays.filter(function(o){ return o.id !== ov.id; });
+          item.textOverlays = localOverlays;
+          colorRow.style.display = "none";
+        });
+      }
+
+      localOverlays.forEach(drawOverlay);
+      item.textOverlays = localOverlays;
+
+      el("editor-add-text").addEventListener("click", function(){
+        var ov = { id: "t" + Date.now(), text: "Testo", x: 50, y: 50, color: "#ffffff" };
+        localOverlays.push(ov);
+        item.textOverlays = localOverlays;
+        var box = drawOverlay(ov);
+        setActiveBox(box, ov);
+        box.focus();
+        document.execCommand && document.execCommand("selectAll", false, null);
+      });
+
+      var prevBtn = el("editor-prev");
+      var nextBtn = el("editor-next");
+      if(prevBtn) prevBtn.addEventListener("click", function(){ idx -= 1; render(); });
+      if(nextBtn) nextBtn.addEventListener("click", function(){ idx += 1; render(); });
+
+      el("editor-cancel").addEventListener("click", function(){ finish(); });
+      el("editor-done").addEventListener("click", function(){ finish(); });
+    }
+
+    function finish(){
+      if(currentUrl) URL.revokeObjectURL(currentUrl);
+      screen.classList.remove("active");
+      screen.innerHTML = "";
+    }
+
+    render();
   }
 
   function openMediaEditor(file, mediaType){
@@ -1886,12 +2191,66 @@
 
   function doPublish(container){
     var title = el("video-title").value.trim();
-    if(!uploadState.file){ alert(uploadState.mediaType === "photo" ? "Scegli una foto." : "Scegli un file video."); return; }
+    var isGroup = uploadState.photoGroup && uploadState.photoGroup.length > 1;
+    if(!isGroup && !uploadState.file){ alert(uploadState.mediaType === "photo" ? "Scegli una foto." : "Scegli un file video."); return; }
     if(!title){ alert("Inserisci un titolo."); return; }
     if(uploadState.publishMode === "channel" && !uploadState.channelId){ alert("Seleziona un canale."); return; }
     var description = el("video-desc").value.trim();
 
     container.innerHTML = '<div class="progress-ring-wrap"><div class="spinner"></div><p style="color:var(--text-muted);font-size:13.5px;">Caricamento in corso...</p></div>';
+
+    function insertVideoRow(videoUrl, thumbUrl, duration, filterName, textOverlays, mediaGroup){
+      sb.from("videos").insert({
+        channel_id: uploadState.publishMode === "channel" ? uploadState.channelId : null,
+        owner_id: uploadState.publishMode === "profile" ? state.session.user.id : null,
+        title: title,
+        description: description,
+        video_url: videoUrl,
+        thumbnail_url: thumbUrl,
+        duration_seconds: Math.round(duration || 0),
+        is_short: mediaGroup ? false : !!uploadState.isShort,
+        media_type: uploadState.mediaType,
+        filter_name: filterName || "none",
+        text_overlays: textOverlays || [],
+        media_group: mediaGroup || null
+      }).select().single().then(function(res){
+        if(res.error){
+          container.innerHTML = emptyState("Errore: " + res.error.message);
+          return;
+        }
+        state.history = [];
+        showView("video", false);
+        openVideo(res.data.id);
+      });
+    }
+
+    if(isGroup){
+      var group = uploadState.photoGroup;
+      var uploadedItems = [];
+      var i = 0;
+      function uploadNext(){
+        if(i >= group.length){
+          var first = uploadedItems[0];
+          insertVideoRow(first.url, first.url, 0, first.filter_name, first.text_overlays, uploadedItems);
+          return;
+        }
+        var item = group[i];
+        var ext = item.file.name.split(".").pop();
+        var path = state.session.user.id + "/" + Date.now() + "_" + i + "." + ext;
+        sb.storage.from("videos").upload(path, item.file).then(function(uploadRes){
+          if(uploadRes.error){
+            container.innerHTML = emptyState("Errore durante il caricamento: " + uploadRes.error.message);
+            return;
+          }
+          var url = sb.storage.from("videos").getPublicUrl(path).data.publicUrl;
+          uploadedItems.push({ url: url, filter_name: item.filterName || "none", text_overlays: item.textOverlays || [] });
+          i += 1;
+          uploadNext();
+        });
+      }
+      uploadNext();
+      return;
+    }
 
     var file = uploadState.file;
     var ext = file.name.split(".").pop();
@@ -1904,7 +2263,7 @@
           return;
         }
         var photoUrl = sb.storage.from("videos").getPublicUrl(path).data.publicUrl;
-        insertVideoRow(photoUrl, photoUrl, 0);
+        insertVideoRow(photoUrl, photoUrl, 0, uploadState.filterName, uploadState.textOverlays, null);
       });
       return;
     }
@@ -1917,7 +2276,7 @@
       var videoUrl = sb.storage.from("videos").getPublicUrl(path).data.publicUrl;
       generateThumbnail(file, function(thumbBlob, duration){
         if(!thumbBlob){
-          insertVideoRow(videoUrl, null, duration);
+          insertVideoRow(videoUrl, null, duration, uploadState.filterName, uploadState.textOverlays, null);
           return;
         }
         var thumbPath = state.session.user.id + "/" + Date.now() + "_thumb.jpg";
@@ -1926,34 +2285,10 @@
           if(!thumbRes.error){
             thumbUrl = sb.storage.from("thumbnails").getPublicUrl(thumbPath).data.publicUrl;
           }
-          insertVideoRow(videoUrl, thumbUrl, duration);
+          insertVideoRow(videoUrl, thumbUrl, duration, uploadState.filterName, uploadState.textOverlays, null);
         });
       });
     });
-
-    function insertVideoRow(videoUrl, thumbUrl, duration){
-      sb.from("videos").insert({
-        channel_id: uploadState.publishMode === "channel" ? uploadState.channelId : null,
-        owner_id: uploadState.publishMode === "profile" ? state.session.user.id : null,
-        title: title,
-        description: description,
-        video_url: videoUrl,
-        thumbnail_url: thumbUrl,
-        duration_seconds: Math.round(duration || 0),
-        is_short: !!uploadState.isShort,
-        media_type: uploadState.mediaType,
-        filter_name: uploadState.filterName || "none",
-        text_overlays: uploadState.textOverlays || []
-      }).select().single().then(function(res){
-        if(res.error){
-          container.innerHTML = emptyState("Errore: " + res.error.message);
-          return;
-        }
-        state.history = [];
-        showView("video", false);
-        openVideo(res.data.id);
-      });
-    }
   }
 
   function generateThumbnail(file, callback){
