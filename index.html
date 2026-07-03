@@ -255,12 +255,11 @@
   .shorts-actions .liked svg{color:var(--ember);}
   .shorts-tap-zone{position:absolute;inset:0;z-index:2;}
   .shorts-mute-icon{position:absolute;top:calc(var(--safe-top) + 60px);right:16px;width:38px;height:38px;border-radius:50%;
-    background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:5;
-    opacity:1;transition:opacity .3s;pointer-events:none;}
+    background:rgba(0,0,0,0.55);border:1px solid rgba(255,255,255,0.2);display:flex;align-items:center;justify-content:center;z-index:6;
+    pointer-events:auto;cursor:pointer;}
   .shorts-mute-icon svg{width:19px;height:19px;}
   .shorts-mute-icon #mute-slash{display:block;}
   .shorts-mute-icon.unmuted #mute-slash{display:none;}
-  .shorts-mute-icon.faded{opacity:0;}
   .shorts-progress{position:absolute;top:var(--safe-top);left:0;right:0;display:flex;gap:4px;padding:10px 12px;z-index:5;}
 
   .shorts-comments-sheet{position:fixed;left:0;right:0;bottom:0;max-height:68vh;background:var(--bg-elevated);
@@ -987,6 +986,11 @@
       setTimeout(function(){ heart.remove(); }, 850);
     }
 
+    function updateMuteIconUI(){
+      var muteIcon = el("shorts-mute-icon");
+      if(muteIcon) muteIcon.classList.toggle("unmuted", !muted);
+    }
+
     var lastTapTime = 0;
     var tapTimer = null;
     tapZone.addEventListener("click", function(e){
@@ -1015,13 +1019,7 @@
             muted = true;
             showPlayPausePop(false);
           }
-          var muteIcon = el("shorts-mute-icon");
-          if(muteIcon){
-            muteIcon.classList.toggle("unmuted", !muted);
-            muteIcon.classList.remove("faded");
-            clearTimeout(muteIcon._fadeTimer);
-            muteIcon._fadeTimer = setTimeout(function(){ muteIcon.classList.add("faded"); }, 1500);
-          }
+          updateMuteIconUI();
         }, 280);
       }
     });
@@ -1049,9 +1047,17 @@
       setTimeout(function(){ icon.remove(); }, 700);
     }
 
-    var initialMuteIcon = el("shorts-mute-icon");
-    if(initialMuteIcon){
-      initialMuteIcon._fadeTimer = setTimeout(function(){ initialMuteIcon.classList.add("faded"); }, 2500);
+    var muteIconBtn = el("shorts-mute-icon");
+    if(muteIconBtn){
+      muteIconBtn.addEventListener("click", function(){
+        if(isPhoto) return;
+        muted = !muted;
+        videoEl.muted = muted;
+        if(muted === false && videoEl.paused){
+          videoEl.play().catch(function(){});
+        }
+        updateMuteIconUI();
+      });
     }
 
     sb.from("likes").select("id", {count:"exact", head:true}).eq("video_id", s.id).then(function(res){
