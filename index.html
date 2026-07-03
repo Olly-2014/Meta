@@ -254,6 +254,13 @@
   .shorts-actions span{font-size:11px;font-weight:600;}
   .shorts-actions .liked svg{color:var(--ember);}
   .shorts-tap-zone{position:absolute;inset:0;z-index:2;}
+  .shorts-mute-icon{position:absolute;top:calc(var(--safe-top) + 60px);right:16px;width:38px;height:38px;border-radius:50%;
+    background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:5;
+    opacity:1;transition:opacity .3s;pointer-events:none;}
+  .shorts-mute-icon svg{width:19px;height:19px;}
+  .shorts-mute-icon #mute-slash{display:block;}
+  .shorts-mute-icon.unmuted #mute-slash{display:none;}
+  .shorts-mute-icon.faded{opacity:0;}
   .shorts-progress{position:absolute;top:var(--safe-top);left:0;right:0;display:flex;gap:4px;padding:10px 12px;z-index:5;}
 
   .shorts-comments-sheet{position:fixed;left:0;right:0;bottom:0;max-height:68vh;background:var(--bg-elevated);
@@ -909,6 +916,7 @@
         mediaTag +
         renderOverlaysHtml(s.text_overlays) +
         '<div class="shorts-tap-zone" id="shorts-tap"></div>' +
+        (!isPhoto ? '<div id="shorts-mute-icon" class="shorts-mute-icon"><svg viewBox="0 0 24 24" fill="none"><path d="M11 5 6 9H3v6h3l5 4V5Z" stroke="white" stroke-width="1.8" stroke-linejoin="round"/><path d="M16 8a5 5 0 0 1 0 8M19 5a9 9 0 0 1 0 14" stroke="white" stroke-width="1.8" stroke-linecap="round"/><line x1="3" y1="3" x2="21" y2="21" stroke="white" stroke-width="1.8" stroke-linecap="round" id="mute-slash"/></svg></div>' : '') +
         '<div class="shorts-info">' +
           '<div class="sh-channel" id="short-author-row"><div class="avatar" style="width:30px;height:30px;font-size:12px;background:' + author.color + '">' + avatarInner(author.name, author.avatarUrl) + '</div>' + esc(author.name) + '</div>' +
           '<div class="sh-title">' + esc(s.title) + '</div>' +
@@ -995,11 +1003,56 @@
       } else {
         lastTapTime = now;
         tapTimer = setTimeout(function(){
-          muted = !muted;
-          videoEl.muted = muted;
+          if(isPhoto) return;
+          if(videoEl.paused){
+            videoEl.play().catch(function(){});
+            videoEl.muted = false;
+            muted = false;
+            showPlayPausePop(true);
+          } else {
+            videoEl.pause();
+            videoEl.muted = true;
+            muted = true;
+            showPlayPausePop(false);
+          }
+          var muteIcon = el("shorts-mute-icon");
+          if(muteIcon){
+            muteIcon.classList.toggle("unmuted", !muted);
+            muteIcon.classList.remove("faded");
+            clearTimeout(muteIcon._fadeTimer);
+            muteIcon._fadeTimer = setTimeout(function(){ muteIcon.classList.add("faded"); }, 1500);
+          }
         }, 280);
       }
     });
+
+    function showPlayPausePop(isPlaying){
+      var icon = document.createElement("div");
+      icon.innerHTML = isPlaying
+        ? '<svg viewBox="0 0 24 24" fill="none"><path d="M8 5v14l11-7Z" fill="white"/></svg>'
+        : '<svg viewBox="0 0 24 24" fill="none"><rect x="6" y="5" width="4" height="14" rx="1" fill="white"/><rect x="14" y="5" width="4" height="14" rx="1" fill="white"/></svg>';
+      icon.style.cssText = "position:absolute;left:50%;top:50%;width:70px;height:70px;margin-left:-35px;margin-top:-35px;" +
+        "z-index:8;pointer-events:none;opacity:0;transform:scale(0.7);transition:transform .25s ease, opacity .25s;" +
+        "background:rgba(0,0,0,0.4);border-radius:50%;display:flex;align-items:center;justify-content:center;";
+      var svgEl = icon.querySelector("svg");
+      svgEl.style.width = "30px";
+      svgEl.style.height = "30px";
+      el("shorts-slide-container").querySelector(".shorts-slide").appendChild(icon);
+      requestAnimationFrame(function(){
+        icon.style.opacity = "1";
+        icon.style.transform = "scale(1)";
+      });
+      setTimeout(function(){
+        icon.style.opacity = "0";
+        icon.style.transform = "scale(0.8)";
+      }, 450);
+      setTimeout(function(){ icon.remove(); }, 700);
+    }
+
+    var initialMuteIcon = el("shorts-mute-icon");
+    if(initialMuteIcon){
+      initialMuteIcon._fadeTimer = setTimeout(function(){ initialMuteIcon.classList.add("faded"); }, 2500);
+    }
 
     sb.from("likes").select("id", {count:"exact", head:true}).eq("video_id", s.id).then(function(res){
       el("short-like-count").textContent = res.count || 0;
